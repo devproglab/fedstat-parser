@@ -21,7 +21,7 @@ except:
         'Error: some of the required packages are missing. Please install the dependencies by running pip install -r '
         'requirements.txt')
     exit()
-conn = sqlite3.connect('structure.sqlite')
+conn = sqlite3.connect('data.sqlite')
 cur = conn.cursor()
 
 def get_structure(id, force_upd=False):
@@ -127,7 +127,7 @@ def make_query(filterdata):
     return query_json
 
 
-def parse_sdmx(response, id):
+def parse_sdmx(response, id, force_upd = False):
     # decode .sdmx data parse document tree
     print('Reading data...')
     data = response.read().decode("utf-8")
@@ -153,6 +153,7 @@ def parse_sdmx(response, id):
     fields_id = list()
     for node in tree.findall('CodeLists/structure:CodeList/[@id]', ns):
         fields_id.append(node.attrib["id"])
+
     # get filter names
     fields_title = list()
     for node in tree.findall('CodeLists/structure:CodeList/structure:Name', ns):
@@ -165,6 +166,7 @@ def parse_sdmx(response, id):
         for node in tree.findall(loc, ns):
             temp.append(node.attrib["value"])
         fields_codes.append(temp)
+
     # get filter value names
     fields_values = list()
     for i in range(0, len(fields_id)):
@@ -173,40 +175,78 @@ def parse_sdmx(response, id):
         for node in tree.findall(loc, ns):
             temp.append(node.text)
         fields_values.append(temp)
+
     # extract data from the xml structure
     # begin with table creation
-    conn = sqlite3.connect('Dataset' + id + '.sqlite')
-    cur = conn.cursor()
-    script = 'CREATE TABLE IF NOT EXISTS Data' + str(id) + ' (id INTEGER PRIMARY KEY, Time TEXT, Value TEXT)'
+    script = 'CREATE TABLE IF NOT EXISTS Data' + str(id) + ' (id INTEGER PRIMARY KEY AUTOINCREMENT UNIQUE, Time TEXT, Value TEXT)'
     cur.executescript(script)
     order = list()
+    cur.execute('SELECT max(id) FROM Data' + str(id))
+    try:
+        r = cur.fetchone()[0]
+    except:
+        r = None
     for node in tree.findall('DataSet/generic:Series[generic:SeriesKey]', ns)[0]:
         for child in node.findall('generic:Value/[@concept]', ns):
             feature = child.attrib["concept"]
-            script = 'CREATE TABLE IF NOT EXISTS ' + str(feature) + ' (id INTEGER PRIMARY KEY, fed_id TEXT, fed_title TEXT)'
+            script = 'CREATE TABLE IF NOT EXISTS ' + str(feature) + ' (id INTEGER PRIMARY KEY AUTOINCREMENT UNIQUE, fed_id TEXT UNIQUE, fed_title TEXT)'
             cur.executescript(script)
-            conn.commit()
-            script = 'ALTER TABLE Data' + str(id) + ' ADD ' + str(feature)
-            cur.execute(script)
             order.append(feature)
+            #need to check if DB already exists
+            if r is not None:
+                a=0
+            else:
+                script = 'ALTER TABLE Data' + str(id) + ' ADD ' + str(feature)
+                cur.execute(script)
+    conn.commit()
+    #now we know names of columns
+    colnames = order + ["TIME", "VALUE"]
+    #send filter data to Db
+    for i in range(0, len(fields_id)):
+        c = fields_id[i] #save filtername we are working with
+        for j in range(0, len(fields_values[i])): #iterate trough all values for each filter
+            script = 'INSERT OR IGNORE INTO ' + str(c) + ' (fed_id, fed_title) VALUES ( ?, ? )' #add filter decoders into DB
+            cur.execute(script, (str(fields_codes[i][j]), str(fields_values[i][j])) )
     conn.commit()
 
     datalist = list()
     for node in tree.findall('DataSet/generic:Series', ns):
         temp = list()
+        temp_ds = []
+        count = 0
         for child in node.findall('generic:SeriesKey//', ns):
             temp.append(child.attrib["value"])
+            script = 'SELECT id FROM ' + fields_id[count] + ' WHERE fed_id=?' #build table relations
+            cur.execute(script, (child.attrib["value"], ))
+            for item in cur:
+                temp_ds.append(item[0])
+            count += 1
         for child in node.findall('generic:Attributes//', ns):
             temp.append(child.attrib["value"])
+            temp_ds.append(child.attrib["value"])
         for child in node.findall('generic:Obs/generic:Time', ns):
             temp.append(child.text)
+            temp_ds.append(child.text)
         for child in node.findall('generic:Obs/generic:ObsValue', ns):
             temp.append(child.attrib["value"])
+            temp_ds.append(child.attrib["value"])
         datalist.append(temp)
-    # sometimes the order of filters does not correspond to the description - fix it
 
+        #Create SQLite command for any number of columns
+        script = 'INSERT INTO Data' + str(id) + ' ('
+        left = ')  VALUES ('
+        for col in colnames:
+            script = script + col + ' , '
+            left = left + '?,'
+        script = script.rstrip(' , ')
+        left = left.rstrip(',') + ')'
+        script = script +  left
+        RowToUpload = tuple(temp_ds)
+        cur.execute(script, RowToUpload)
+
+    conn.commit()
+    # sometimes the order of filters does not correspond to the description - fix it
     # merge all data into dataframe
-    colnames = order + ["TIME", "VALUE"]
     parsed = pd.DataFrame(datalist, columns=colnames)
 
     # create decoding dictionaries to map internal codes to human-readable names
@@ -214,7 +254,14 @@ def parse_sdmx(response, id):
     for i in range(0, len(fields_id)):
         tempdf = pd.DataFrame({fields_id[i]: fields_codes[i], str(fields_id[i] + '_title'): fields_values[i]})
         decoders.append(tempdf)
-    #print(decoders)
+
+    cur.execute('CREATE TABLE IF NOT EXISTS Metadata (id INTEGER PRIMARY KEY AUTOINCREMENT UNIQUE, dataset TEXT UNIQUE, columns TEXT, last_time TEXT)')
+    cur.execute('SELECT max(TIME) FROM Data' + str(id))
+    row = cur.fetchone()
+    for item in row:
+        t = item
+    cur.execute('INSERT OR IGNORE INTO Metadata (dataset, columns, last_time) VALUES (?, ?, ?)', (id, str(colnames), t))
+    conn.commit()
     # append values from dictionaries to the dataframe
     for i in range(0, len(fields_id)):
         parsed = pd.merge(parsed, decoders[i], how='left')
@@ -277,12 +324,51 @@ def query_splitter(filters, id):
         overall_df = pd.concat([overall_df, chunk_parsed])
     return overall_df
 
+def load_data(id):
+    cur.execute('SELECT columns FROM Metadata WHERE dataset=?', (id, ))
+    item = cur.fetchone()
+    for row in item:
+        row = row.rstrip(']')
+        row = row.lstrip('[')
+        colnames = row.split(',')
+    beg = 'SELECT '
+    mid = 'FROM Data' + id
+    end = ' ON '
+    for col in colnames:
+        col = col.strip()
+        col = col[1:len(col)-1]
+        try:
+            cur.execute('SELECT max(id) FROM ' + col)
+            row = cur.fetchone()
+        except:
+            row = None
+        if row is not None and col != 'PERIOD' and col != 'EI':
+            beg = beg + col + '.fed_title, '
+            mid = mid + ' JOIN ' + col
+            end = end + 'Data' + id + '.' + col + ' = ' + col + '.id ' + 'and '
+        else:
+            beg = beg + 'Data' + id + '.' + col + ', '
+
+    script = beg.rstrip(', ') + ' ' + mid + end.rstrip('and ') + 'd ORDER BY Data' + id + '.TIME'
+    print(script)
+
+    #RowToUpload = tuple(temp_ds)
+    #cur.execute(script, RowToUpload)
+    cur.execute(script)
+    result = pd.DataFrame(cur, columns = ['s_OKATO_title', 's_mosh_title', 'EI', 'PERIOD', 'TIME', 'VALUE'])
+    print(result.head(5))
+    return result
 
 def get_data(id, force_upd=False):
     filters = get_structure(id, force_upd=force_upd)
-    # CHANGE TO DB
-    if os.path.exists(str('data' + id + '.csv')) and not force_upd:
-        overall_df = pd.read_csv(str('data' + id + '.csv'), sep=';')
+    try:
+        cur.execute('SELECT max(id) FROM Data' + str(id))
+        row = cur.fetchone()
+    except:
+        row = None
+    if row is not None and not force_upd:
+    #if os.path.exists(str('data' + id + '.csv')) and not force_upd:
+        overall_df = load_data(id)
         overall_df = overall_df.dropna()
         overall_df["TIME"] = overall_df.TIME.astype(int)
         print('Data retrieved.')
@@ -318,7 +404,7 @@ def get_data(id, force_upd=False):
     else:
         result = query_splitter(filters, id)
         result.to_csv(str('data' + id + '.csv'), sep=';',
-                      encoding="utf-8-sig", index=False)
+                     encoding="utf-8-sig", index=False)
     print('Data processing successful.')
     return result
 
