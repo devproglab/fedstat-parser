@@ -15,18 +15,27 @@ try:
     from urllib.request import Request, urlopen
     import xml.etree.ElementTree as ET
     import time
+    import sqlite3
 except:
     print(
         'Error: some of the required packages are missing. Please install the dependencies by running pip install -r '
         'requirements.txt')
     exit()
-
+conn = sqlite3.connect('structure.sqlite')
+cur = conn.cursor()
 
 def get_structure(id, force_upd=False):
-    # REPLACE TO DB QUERY
-    if os.path.exists(str('struct/' + id + '.csv')) and not force_upd:
+    cur.execute('''CREATE TABLE IF NOT EXISTS Structure
+        (id INTEGER PRIMARY KEY, database TEXT, ﻿filter_id TEXT, filter_title TEXT,
+         value_id TEXT, value_title TEXT, filter_type TEXT)''')
+    #try to get structure
+    cur.execute('SELECT id FROM Structure WHERE database=? LIMIT 1', (str(id), ))
+    row = cur.fetchone()
+    if row is not None and not force_upd:
         print('Reading data structure...')
-        filters = pd.read_csv(str('struct/' + id + '.csv'), sep=';')
+        clmns = ['filter_id', 'fiter_title', 'value_id', 'value_title', 'filter_type']
+        cur.execute('SELECT ﻿filter_id, filter_title, value_id, value_title, filter_type FROM Structure WHERE database=?', (str(id), ))
+        filters = pd.DataFrame(cur, columns = clmns)
         filters['filter_id'] = filters.filter_id.astype(str)
         print('Data structure retrieved.')
     else:
@@ -87,7 +96,10 @@ def get_structure(id, force_upd=False):
             filters = pd.merge(filters, layout, how='left')
             # REMOVE LATER: WRITE STRUCTURE TO FILE
             filters['filter_id'] = filters.filter_id.astype(str)
-            filters.to_csv(str('struct/' + id + '.csv'), sep=';', encoding="utf-8-sig", index=False)
+            for index, row in filters.iterrows():
+                cur.execute('''INSERT INTO Structure (﻿filter_id, filter_title,
+                 value_id, value_title, filter_type, database) VALUES (?, ?, ?, ?, ?, ?)''', (str(row['filter_id']), row['filter_title'], row['value_id'], row['value_title'], row['filter_type'], id ) )
+            conn.commit()
             print('Data structure retrieved.')
     return filters
 
@@ -103,7 +115,7 @@ def make_query(filterdata):
                                                [val[0] for val in filterdata[["value_id"]].values.tolist()])]
     query_struct = filterdata.drop_duplicates(subset=["filter_id"]).loc[:, ['filter_type', 'filter_id']]
     # form the query
-    meta = filterdata.loc[filterdata["filter_id"] == "0"].values[0]
+    meta = filterdata.loc[filterdata["filter_id"] == '0'].values[0]
     query = [('id', meta[2]),
              ('title', meta[3])] + filterdata.drop_duplicates(
         subset=["filter_id"]).loc[:, ['filter_type', 'filter_id']].to_records(index=None).tolist() \
@@ -115,7 +127,7 @@ def make_query(filterdata):
     return query_json
 
 
-def parse_sdmx(response):
+def parse_sdmx(response, id):
     # decode .sdmx data parse document tree
     print('Reading data...')
     data = response.read().decode("utf-8")
@@ -162,6 +174,23 @@ def parse_sdmx(response):
             temp.append(node.text)
         fields_values.append(temp)
     # extract data from the xml structure
+    # begin with table creation
+    conn = sqlite3.connect('Dataset' + id + '.sqlite')
+    cur = conn.cursor()
+    script = 'CREATE TABLE IF NOT EXISTS Data' + str(id) + ' (id INTEGER PRIMARY KEY, Time TEXT, Value TEXT)'
+    cur.executescript(script)
+    order = list()
+    for node in tree.findall('DataSet/generic:Series[generic:SeriesKey]', ns)[0]:
+        for child in node.findall('generic:Value/[@concept]', ns):
+            feature = child.attrib["concept"]
+            script = 'CREATE TABLE IF NOT EXISTS ' + str(feature) + ' (id INTEGER PRIMARY KEY, fed_id TEXT, fed_title TEXT)'
+            cur.executescript(script)
+            conn.commit()
+            script = 'ALTER TABLE Data' + str(id) + ' ADD ' + str(feature)
+            cur.execute(script)
+            order.append(feature)
+    conn.commit()
+
     datalist = list()
     for node in tree.findall('DataSet/generic:Series', ns):
         temp = list()
@@ -175,25 +204,24 @@ def parse_sdmx(response):
             temp.append(child.attrib["value"])
         datalist.append(temp)
     # sometimes the order of filters does not correspond to the description - fix it
-    order = list()
-    for node in tree.findall('DataSet/generic:Series[generic:SeriesKey]', ns)[0]:
-        for child in node.findall('generic:Value/[@concept]', ns):
-            order.append(child.attrib["concept"])
+
     # merge all data into dataframe
     colnames = order + ["TIME", "VALUE"]
     parsed = pd.DataFrame(datalist, columns=colnames)
+
     # create decoding dictionaries to map internal codes to human-readable names
     decoders = list()
     for i in range(0, len(fields_id)):
         tempdf = pd.DataFrame({fields_id[i]: fields_codes[i], str(fields_id[i] + '_title'): fields_values[i]})
         decoders.append(tempdf)
+    #print(decoders)
     # append values from dictionaries to the dataframe
     for i in range(0, len(fields_id)):
         parsed = pd.merge(parsed, decoders[i], how='left')
     return parsed
 
 
-def query_splitter(filters):
+def query_splitter(filters, id):
     chunk_size = 1000000
     overall_df = pd.DataFrame()
     if query_size(filters) > chunk_size:
@@ -216,7 +244,7 @@ def query_splitter(filters):
                     response = urlopen(request, timeout=300)
                     # EXCEPTION CATCHER NECESSARY
                     print('Data retrieved.')
-                    chunk_parsed = parse_sdmx(response)
+                    chunk_parsed = parse_sdmx(response, id)
                     overall_df = pd.concat([overall_df, chunk_parsed])
                     time.sleep(1.5)
                     # write to DB
@@ -230,12 +258,13 @@ def query_splitter(filters):
                 response = urlopen(request, timeout=300)
                 # EXCEPTION CATCHER NECESSARY
                 print('Data retrieved.')
-                chunk_parsed = parse_sdmx(response)
+                chunk_parsed = parse_sdmx(response, id)
                 overall_df = pd.concat([overall_df, chunk_parsed])
                 time.sleep(1.5)
                 # WRITER HERE
                 print('Write to DB')
     else:
+        #print(filters)
         query = make_query(filters)
         # send request
         print('Retrieving data...')
@@ -244,7 +273,7 @@ def query_splitter(filters):
         response = urlopen(request, timeout=300)
         # EXCEPTION CATCHER NECESSARY
         print('Data retrieved.')
-        chunk_parsed = parse_sdmx(response)
+        chunk_parsed = parse_sdmx(response, id)
         overall_df = pd.concat([overall_df, chunk_parsed])
     return overall_df
 
@@ -252,8 +281,8 @@ def query_splitter(filters):
 def get_data(id, force_upd=False):
     filters = get_structure(id, force_upd=force_upd)
     # CHANGE TO DB
-    if os.path.exists(str('data/' + id + '.csv')) and not force_upd:
-        overall_df = pd.read_csv(str('data/' + id + '.csv'), sep=';')
+    if os.path.exists(str('data' + id + '.csv')) and not force_upd:
+        overall_df = pd.read_csv(str('data' + id + '.csv'), sep=';')
         overall_df = overall_df.dropna()
         overall_df["TIME"] = overall_df.TIME.astype(int)
         print('Data retrieved.')
@@ -281,14 +310,14 @@ def get_data(id, force_upd=False):
             temp = pd.DataFrame(templist, columns=filters.columns)
             # change the filters to load missing dates
             filters_augm = pd.concat([filters.loc[(filters["filter_id"] != "3") & (filters["filter_id"] != "33560")], temp])
-            result = query_splitter(filters_augm)
+            result = query_splitter(filters_augm, id)
             result = pd.concat([overall_df, result])
             result = result.drop_duplicates()
-            result.to_csv(str('data/' + id + '.csv'), sep=';',
+            result.to_csv(str('data' + id + '.csv'), sep=';',
                           encoding="utf-8-sig", index=False)
     else:
-        result = query_splitter(filters)
-        result.to_csv(str('data/' + id + '.csv'), sep=';',
+        result = query_splitter(filters, id)
+        result.to_csv(str('data' + id + '.csv'), sep=';',
                       encoding="utf-8-sig", index=False)
     print('Data processing successful.')
     return result
@@ -299,7 +328,7 @@ def get_periods(id):
     filters_short = pd.concat(
         [filters.loc[(filters["filter_id"] != "3") & (filters["filter_id"] != "33560") & (filters["filter_id"] != "57956")].groupby('filter_id').first().reset_index(),
          filters.loc[(filters["filter_id"] == "3") | (filters["filter_id"] == "33560") | (filters["filter_id"] == "57956")]])
-    result = query_splitter(filters_short)
+    result = query_splitter(filters_short, id)
     periods = list()
     result["TIME"] = result.TIME.astype(int)
     for r in result[["TIME", "PERIOD"]].itertuples(index=False):
