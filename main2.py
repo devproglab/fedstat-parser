@@ -209,28 +209,28 @@ def parse_sdmx(response, id, force_upd = False):
             cur.execute(script, (str(fields_codes[i][j]), str(fields_values[i][j])) )
     conn.commit()
 
-    datalist = list()
+    #datalist = list()
     for node in tree.findall('DataSet/generic:Series', ns):
-        temp = list()
+        #temp = list()
         temp_ds = []
         count = 0
         for child in node.findall('generic:SeriesKey//', ns):
-            temp.append(child.attrib["value"])
+            #temp.append(child.attrib["value"])
             script = 'SELECT id FROM ' + fields_id[count] + ' WHERE fed_id=?' #build table relations
             cur.execute(script, (child.attrib["value"], ))
             for item in cur:
                 temp_ds.append(item[0])
             count += 1
         for child in node.findall('generic:Attributes//', ns):
-            temp.append(child.attrib["value"])
+            #temp.append(child.attrib["value"])
             temp_ds.append(child.attrib["value"])
         for child in node.findall('generic:Obs/generic:Time', ns):
-            temp.append(child.text)
+            #temp.append(child.text)
             temp_ds.append(child.text)
         for child in node.findall('generic:Obs/generic:ObsValue', ns):
-            temp.append(child.attrib["value"])
+            #temp.append(child.attrib["value"])
             temp_ds.append(child.attrib["value"])
-        datalist.append(temp)
+        #datalist.append(temp)
 
         #Create SQLite command for any number of columns
         script = 'INSERT INTO Data' + str(id) + ' ('
@@ -247,24 +247,31 @@ def parse_sdmx(response, id, force_upd = False):
     conn.commit()
     # sometimes the order of filters does not correspond to the description - fix it
     # merge all data into dataframe
-    parsed = pd.DataFrame(datalist, columns=colnames)
+    #parsed = pd.DataFrame(datalist, columns=colnames)
 
     # create decoding dictionaries to map internal codes to human-readable names
-    decoders = list()
-    for i in range(0, len(fields_id)):
-        tempdf = pd.DataFrame({fields_id[i]: fields_codes[i], str(fields_id[i] + '_title'): fields_values[i]})
-        decoders.append(tempdf)
 
+    #decoders = list()
+    #for i in range(0, len(fields_id)):
+        #tempdf = pd.DataFrame({fields_id[i]: fields_codes[i], str(fields_id[i] + '_title'): fields_values[i]})
+        #decoders.append(tempdf)
+
+    #write all column names into a string
+    cols = ''
+    for item in colnames:
+        cols = cols + item + ';'
     cur.execute('CREATE TABLE IF NOT EXISTS Metadata (id INTEGER PRIMARY KEY AUTOINCREMENT UNIQUE, dataset TEXT UNIQUE, columns TEXT, last_time TEXT)')
+    #if metadata for this dataset already exists, do nothing, else append new row
     cur.execute('SELECT max(TIME) FROM Data' + str(id))
     row = cur.fetchone()
     for item in row:
         t = item
-    cur.execute('INSERT OR IGNORE INTO Metadata (dataset, columns, last_time) VALUES (?, ?, ?)', (id, str(colnames), t))
+    cur.execute('INSERT OR IGNORE INTO Metadata (dataset, columns, last_time) VALUES (?, ?, ?)', (id, cols, t))
     conn.commit()
     # append values from dictionaries to the dataframe
-    for i in range(0, len(fields_id)):
-        parsed = pd.merge(parsed, decoders[i], how='left')
+    #for i in range(0, len(fields_id)):
+        #parsed = pd.merge(parsed, decoders[i], how='left')
+    parsed = load_data(id)
     return parsed
 
 
@@ -328,15 +335,12 @@ def load_data(id):
     cur.execute('SELECT columns FROM Metadata WHERE dataset=?', (id, ))
     item = cur.fetchone()
     for row in item:
-        row = row.rstrip(']')
-        row = row.lstrip('[')
-        colnames = row.split(',')
+        colnames = row.split(';')
+    colnames = colnames[:-1]
     beg = 'SELECT '
     mid = 'FROM Data' + id
     end = ' ON '
     for col in colnames:
-        col = col.strip()
-        col = col[1:len(col)-1]
         try:
             cur.execute('SELECT max(id) FROM ' + col)
             row = cur.fetchone()
@@ -349,14 +353,9 @@ def load_data(id):
         else:
             beg = beg + 'Data' + id + '.' + col + ', '
 
-    script = beg.rstrip(', ') + ' ' + mid + end.rstrip('and ') + 'd ORDER BY Data' + id + '.TIME'
-    print(script)
-
-    #RowToUpload = tuple(temp_ds)
-    #cur.execute(script, RowToUpload)
+    script = beg.rstrip(', ') + ' ' + mid + end[:-4] + ' ORDER BY Data' + id + '.TIME'
     cur.execute(script)
-    result = pd.DataFrame(cur, columns = ['s_OKATO_title', 's_mosh_title', 'EI', 'PERIOD', 'TIME', 'VALUE'])
-    print(result.head(5))
+    result = pd.DataFrame(cur, columns = colnames)
     return result
 
 def get_data(id, force_upd=False):
@@ -401,11 +400,18 @@ def get_data(id, force_upd=False):
             result = result.drop_duplicates()
             result.to_csv(str('data' + id + '.csv'), sep=';',
                           encoding="utf-8-sig", index=False)
-    else:
+    elif force_upd and row is not None:
+        cur.execute('DROP TABLE Data' + id)
+        cur.execute('DELETE from Structure WHERE database=?', (id, ) )
+        result = query_splitter(filters, id)
+        result.to_csv(str('data' + id + '.csv'), sep=';',
+                     encoding="utf-8-sig", index=False)
+    elif row is None:
         result = query_splitter(filters, id)
         result.to_csv(str('data' + id + '.csv'), sep=';',
                      encoding="utf-8-sig", index=False)
     print('Data processing successful.')
+    print(result.head(2))
     return result
 
 
@@ -422,6 +428,6 @@ def get_periods(id):
     return set(periods)
 
 
-parsed = get_data("34118")
-# parsed = get_data("58971", force_upd=True)
-# = get_periods('31074')
+parsed = get_data("34118") #34118
+#parsed = get_data("58971", force_upd=True)
+# parsed = get_periods('31074')
