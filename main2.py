@@ -61,7 +61,12 @@ def get_structure(id, force_upd=False):
             results = codecs.decode(results, 'unicode-escape')
             results = re.sub("\'", '\"', results)
             results = re.sub(r"\n+\s*(\w+):", r'"\1":', results)
-            results = json.loads(results)
+            try:
+                results = json.loads(results)
+            except:
+                print('Data structure retrieving failed')
+                results = []
+                return results
             # put filter metadata to list
             df2 = list(results["filters"].items())
             # write everything to a single dataframe
@@ -360,6 +365,9 @@ def load_data(id):
 
 def get_data(id, force_upd=False):
     filters = get_structure(id, force_upd=force_upd)
+    if filters.empty:
+        print('Data processing stopped')
+        return []
     try:
         cur.execute('SELECT max(id) FROM Data' + str(id))
         row = cur.fetchone()
@@ -398,8 +406,8 @@ def get_data(id, force_upd=False):
             result = query_splitter(filters_augm, id)
             result = pd.concat([overall_df, result])
             result = result.drop_duplicates()
-            result.to_csv(str('data' + id + '.csv'), sep=';',
-                          encoding="utf-8-sig", index=False)
+            #result.to_csv(str('data' + id + '.csv'), sep=';',
+                          #encoding="utf-8-sig", index=False)
     elif force_upd and row is not None:
         cur.execute('DROP TABLE Data' + id)
         cur.execute('DELETE from Structure WHERE database=?', (id, ) )
@@ -408,8 +416,8 @@ def get_data(id, force_upd=False):
                      encoding="utf-8-sig", index=False)
     elif row is None:
         result = query_splitter(filters, id)
-        result.to_csv(str('data' + id + '.csv'), sep=';',
-                     encoding="utf-8-sig", index=False)
+        #result.to_csv(str('data' + id + '.csv'), sep=';',
+                     #encoding="utf-8-sig", index=False)
     print('Data processing successful.')
     print(result.head(2))
     return result
@@ -428,6 +436,10 @@ def get_periods(id):
     return set(periods)
 
 
-parsed = get_data("34118") #34118
+
+print('Which data do you want to work with?')
+print('34118 - housing data, 58971 - food, 31452 - more housing data')
+id = str(input())
+parsed = get_data(id) #31074 s bad
 #parsed = get_data("58971", force_upd=True)
-# parsed = get_periods('31074')
+#parsed = get_periods(id)
