@@ -18,30 +18,45 @@ try:
     import sqlite3
 except:
     print(
-        'Error: some of the required packages are missing. Please install the dependencies by running pip install -r '
-        'requirements.txt')
+        'Error: some of the required packages are missing. Please install them.')
     exit()
 conn = sqlite3.connect('data.sqlite')
 cur = conn.cursor()
+conn_str = sqlite3.connect('structure.sqlite')
+cur_str = conn_str.cursor()
 
 def get_structure(id, force_upd=False):
-    cur.execute('''CREATE TABLE IF NOT EXISTS Structure
-        (id INTEGER PRIMARY KEY, database TEXT, ﻿filter_id TEXT, filter_title TEXT,
-         value_id TEXT, value_title TEXT, filter_type TEXT)''')
+    cur_str.execute('''CREATE TABLE IF NOT EXISTS Structure
+        (id INTEGER PRIMARY KEY, database INTEGER, filter_id INTEGER,
+         value_id INTEGER, filter_type INTEGER)''')
+    cur_str.execute('''CREATE TABLE IF NOT EXISTS Filters
+        (filter_id INTEGER PRIMARY KEY, filter_title TEXT)''')
+    cur_str.execute('''CREATE TABLE IF NOT EXISTS Filter_values
+        (value_id INTEGER PRIMARY KEY, value_title TEXT)''')
+    cur_str.execute('''CREATE TABLE IF NOT EXISTS Filter_types
+        (filter_type INTEGER PRIMARY KEY AUTOINCREMENT, filter_type_title TEXT UNIQUE)''')
     #try to get structure
-    cur.execute('SELECT id FROM Structure WHERE database=? LIMIT 1', (str(id), ))
-    row = cur.fetchone()
+    cur_str.execute('SELECT id FROM Structure WHERE database=? LIMIT 1', (str(id), ))
+    row = cur_str.fetchone()
     if row is not None and not force_upd:
         print('Reading data structure...')
         clmns = ['filter_id', 'fiter_title', 'value_id', 'value_title', 'filter_type']
-        cur.execute('SELECT ﻿filter_id, filter_title, value_id, value_title, filter_type FROM Structure WHERE database=?', (str(id), ))
-        filters = pd.DataFrame(cur, columns = clmns)
+        cur_str.execute('''SELECT Structure.filter_id, Filters.filter_title, Structure.value_id, Filter_values.value_title, 
+        Filter_types.filter_type_title 
+        FROM Structure 
+        JOIN Filters on Structure.filter_id=Filters.filter_id
+        JOIN Filter_values on Structure.value_id=Filter_values.value_id
+        JOIN Filter_types on Structure.filter_type=Filter_types.filter_type WHERE database = ?
+        ''', (id, ))
+        #cur_str.execute('SELECT ﻿filter_id, filter_title, value_id, value_title, filter_type FROM Structure WHERE database=?', (id, ))
+        filters = pd.DataFrame(cur_str, columns = clmns)
         filters['filter_id'] = filters.filter_id.astype(str)
+        filters['value_id'] = filters.value_id.astype(str)
         print('Data structure retrieved.')
     else:
         # load all possible filter values and codes from the fedstat page
         print('Downloading data structure...')
-        url = "https://fedstat.ru/indicator/" + id
+        url = "https://fedstat.ru/indicator/" + str(id)
         try:
             response = urllib.request.urlopen(url, timeout=300)
         except HTTPError as error:
@@ -102,9 +117,14 @@ def get_structure(id, force_upd=False):
             # REMOVE LATER: WRITE STRUCTURE TO FILE
             filters['filter_id'] = filters.filter_id.astype(str)
             for index, row in filters.iterrows():
-                cur.execute('''INSERT INTO Structure (﻿filter_id, filter_title,
-                 value_id, value_title, filter_type, database) VALUES (?, ?, ?, ?, ?, ?)''', (str(row['filter_id']), row['filter_title'], row['value_id'], row['value_title'], row['filter_type'], id ) )
-            conn.commit()
+                cur_str.execute('''INSERT OR IGNORE INTO Filters (filter_id, filter_title) VALUES (?, ?)''', (str(row['filter_id']), row['filter_title']))
+                cur_str.execute('''INSERT OR IGNORE INTO Filter_values (value_id, value_title) VALUES (?, ?)''', (str(row['value_id']), row['value_title']))
+                cur_str.execute('''INSERT OR IGNORE INTO Filter_types (filter_type_title) VALUES (?)''', (str(row['filter_type']),))
+                cur_str.execute('SELECT filter_type FROM Filter_types WHERE filter_type_title = ? ', (str(row['filter_type']), ))
+                filter_type = cur_str.fetchone()[0]
+                cur_str.execute('''INSERT INTO Structure (filter_id,
+                  value_id, filter_type, database) VALUES (?, ?, ?, ?)''', (str(row['filter_id']), row['value_id'], filter_type, id ) )
+            conn_str.commit()
             print('Data structure retrieved.')
     return filters
 
@@ -366,7 +386,7 @@ def load_data(id):
 def get_data(id, force_upd=False):
     filters = get_structure(id, force_upd=force_upd)
     if filters.empty:
-        print('Data processing stopped')
+        print('Error in getting the internal Fedstat filter structure. Please, try again.')
         return []
     try:
         cur.execute('SELECT max(id) FROM Data' + str(id))
