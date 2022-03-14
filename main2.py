@@ -158,7 +158,7 @@ def index_appender(list):
         newlist.append(v + str(count + 1) if totalcount > 1 else v)
     return newlist
 
-def parse_sdmx(response, id, force_upd = False):
+def parse_sdmx(response, id, force_upd = False, nowrite=False):
     # decode .sdmx data parse document tree
     print('Reading data...')
     data = response.read().decode("utf-8")
@@ -169,10 +169,6 @@ def parse_sdmx(response, id, force_upd = False):
         tree = ET.fromstring(data)
     except:
         return
-    conn = sqlite3.connect('data.sqlite')
-    cur = conn.cursor()
-    conn_str = sqlite3.connect('structure.sqlite')
-    cur_str = conn_str.cursor()
     # define namespace corrsepondences to correctly parse xml data
     ns = {'common': 'http://www.SDMX.org/resources/SDMXML/schemas/v1_0/common',
           'compact': 'http://www.SDMX.org/resources/SDMXML/schemas/v1_0/compact',
@@ -188,7 +184,6 @@ def parse_sdmx(response, id, force_upd = False):
     fields_id = list()
     for node in tree.findall('CodeLists/structure:CodeList/[@id]', ns):
         fields_id.append(node.attrib["id"])
-
     # get filter names
     fields_title = list()
     for node in tree.findall('CodeLists/structure:CodeList/structure:Name', ns):
@@ -201,7 +196,6 @@ def parse_sdmx(response, id, force_upd = False):
         for node in tree.findall(loc, ns):
             temp.append(node.attrib["value"])
         fields_codes.append(temp)
-
     # get filter value names
     fields_values = list()
     for i in range(0, len(fields_id)):
@@ -210,12 +204,10 @@ def parse_sdmx(response, id, force_upd = False):
         for node in tree.findall(loc, ns):
             temp.append(node.text)
         fields_values.append(temp)
-
     # rename possible duplicates caused by internal rosstat code changes for Sibersky & Dalnevostochny Federal Districts
     idx = fields_id.index('s_OKATO')
     fields_codes[idx] = [w.replace('035', '041') for w in fields_codes[idx]]
     fields_codes[idx] = [w.replace('036', '042') for w in fields_codes[idx]]
-
     # extract data from the xml structure
     # begin with table creation
     script = 'CREATE TABLE IF NOT EXISTS Data' + str(id) + ' (id INTEGER PRIMARY KEY AUTOINCREMENT UNIQUE, Time INTEGER, Value REAL)'
@@ -296,37 +288,30 @@ def parse_sdmx(response, id, force_upd = False):
         cur.execute(script, RowToUpload)
 
     conn.commit()
-    # sometimes the order of filters does not correspond to the description - fix it
-    # merge all data into dataframe
-    #parsed = pd.DataFrame(datalist, columns=colnames)
-
-    # create decoding dictionaries to map internal codes to human-readable names
-
-    #decoders = list()
-    #for i in range(0, len(fields_id)):
-        #tempdf = pd.DataFrame({fields_id[i]: fields_codes[i], str(fields_id[i] + '_title'): fields_values[i]})
-        #decoders.append(tempdf)
-
     #write all column names into a string
     cols = ''
     for item in colnames:
         cols = cols + item + ';'
-    cur.execute('CREATE TABLE IF NOT EXISTS Metadata (id INTEGER PRIMARY KEY AUTOINCREMENT UNIQUE, dataset INTEGER UNIQUE, columns TEXT, last_time INTEGER)')
+    cur.execute('CREATE TABLE IF NOT EXISTS Metadata (id INTEGER PRIMARY KEY AUTOINCREMENT UNIQUE, dataset INTEGER UNIQUE, columns TEXT, periods TEXT)')
     #if metadata for this dataset already exists, do nothing, else append new row
-    cur.execute('SELECT max(TIME) FROM Data' + str(id))
+    # cur.execute('SELECT max(TIME) FROM Data' + str(id))
+    # row = cur.fetchone()
+    # for item in row:
+    #     t = item
+    cur.execute('INSERT OR IGNORE INTO Metadata (dataset, columns) VALUES (?, ?)', (id, cols))
+    conn.commit()
+    parsed = load_data(id)
+    last_upd = set(list(tuple(x) for x in parsed.loc[:, ["TIME", "PERIOD"]].values))
+    cur.execute('SELECT id FROM Metadata WHERE dataset = ?', (str(id), ))
     row = cur.fetchone()
     for item in row:
-        t = item
-    cur.execute('INSERT OR IGNORE INTO Metadata (dataset, columns, last_time) VALUES (?, ?, ?)', (id, cols, t))
+        meta_id = item
+    cur.execute('UPDATE Metadata SET periods = ? WHERE id = ?', (str(last_upd), meta_id))
     conn.commit()
-    # append values from dictionaries to the dataframe
-    #for i in range(0, len(fields_id)):
-        #parsed = pd.merge(parsed, decoders[i], how='left')
-    parsed = load_data(id)
     return parsed
 
 
-def query_splitter(filters, id):
+def query_splitter(filters, id, nowrite=False):
     chunk_size = 1000000
     overall_df = pd.DataFrame()
     if query_size(filters) > chunk_size:
@@ -349,7 +334,7 @@ def query_splitter(filters, id):
                     response = urlopen(request, timeout=300)
                     # EXCEPTION CATCHER NECESSARY
                     print('Data retrieved.')
-                    chunk_parsed = parse_sdmx(response, id)
+                    chunk_parsed = parse_sdmx(response, id, nowrite=nowrite)
                     overall_df = pd.concat([overall_df, chunk_parsed])
                     time.sleep(1.5)
                     # write to DB
@@ -363,11 +348,10 @@ def query_splitter(filters, id):
                 response = urlopen(request, timeout=300)
                 # EXCEPTION CATCHER NECESSARY
                 print('Data retrieved.')
-                chunk_parsed = parse_sdmx(response, id)
-                overall_df = pd.concat([overall_df, chunk_parsed])
+                chunk_parsed = parse_sdmx(response, id, nowrite=nowrite)
+                #overall_df = pd.concat([overall_df, chunk_parsed])
                 time.sleep(1.5)
                 # WRITER HERE
-                print('Write to DB')
     else:
         #print(filters)
         query = make_query(filters)
@@ -378,7 +362,7 @@ def query_splitter(filters, id):
         response = urlopen(request, timeout=300)
         # EXCEPTION CATCHER NECESSARY
         print('Data retrieved.')
-        chunk_parsed = parse_sdmx(response, id)
+        chunk_parsed = parse_sdmx(response, id, nowrite=nowrite)
         overall_df = pd.concat([overall_df, chunk_parsed])
     return overall_df
 
@@ -427,19 +411,20 @@ def get_data(id, force_upd=False):
     except:
         row = None
     if row is not None and not force_upd:
-    #if os.path.exists(str('data' + id + '.csv')) and not force_upd:
-        overall_df = load_data(id)
-        overall_df = overall_df.dropna()
-        overall_df["TIME"] = overall_df.TIME.astype(int)
-        print('Data retrieved.')
+        #overall_df = load_data(id)
+        #print('Data retrieved.')
         # get last updated date on server
         upd = get_periods(id)
-        # get last updated date locally CHANGE TO DB
-        last_upd = set(list(tuple(x) for x in overall_df.loc[:, ["TIME", "PERIOD"]].values))
+        # get last updated date locally
+        cur.execute('SELECT periods FROM Metadata WHERE dataset = ?', (str(id),))
+        row = cur.fetchone()
+        for item in row:
+            last_upd = eval(item)
+        #last_upd = set(list(tuple(x) for x in overall_df.loc[:, ["TIME", "PERIOD"]].values))
         # check which dates are present on server and are not downloaded
         missing = [x for x in upd if x not in last_upd]
         if len(missing) == 0:
-            return overall_df
+            return load_data(id)
         else:
             # get period ids dictionary to map value to ids
             period_ids = dict(filters.loc[filters["filter_id"] == '33560', ["value_id", "value_title"]].values.tolist())
@@ -457,23 +442,16 @@ def get_data(id, force_upd=False):
             # change the filters to load missing dates
             filters_augm = pd.concat([filters.loc[(filters["filter_id"] != "3") & (filters["filter_id"] != "33560")], temp])
             result = query_splitter(filters_augm, id)
-            result = pd.concat([overall_df, result])
-            result = result.drop_duplicates()
-            #result.to_csv(str('data' + id + '.csv'), sep=';',
-                          #encoding="utf-8-sig", index=False)
+            #result = pd.concat([overall_df, result])
+            #result = result.drop_duplicates()
     elif force_upd and row is not None:
         cur.execute('DROP TABLE Data' + str(id))
         cur_str.execute('DELETE from Structure WHERE database=?', (str(id), ) )
         result = query_splitter(filters, id)
-        result.to_csv(str('data' + id + '.csv'), sep=';',
-                     encoding="utf-8-sig", index=False)
     elif row is None:
         result = query_splitter(filters, id)
-        #result.to_csv(str('data' + id + '.csv'), sep=';',
-                     #encoding="utf-8-sig", index=False)
     print('Data processing successful.')
     print(result.head(2))
-    return result
 
 
 def get_periods(id):
@@ -481,7 +459,7 @@ def get_periods(id):
     filters_short = pd.concat(
         [filters.loc[(filters["filter_id"] != "3") & (filters["filter_id"] != "33560") & (filters["filter_id"] != "57956")].groupby('filter_id').first().reset_index(),
          filters.loc[(filters["filter_id"] == "3") | (filters["filter_id"] == "33560") | (filters["filter_id"] == "57956")]])
-    result = query_splitter(filters_short, id)
+    result = query_splitter(filters_short, id, nowrite=True)
     periods = list()
     result["TIME"] = result.TIME.astype(int)
     for r in result[["TIME", "PERIOD"]].itertuples(index=False):
