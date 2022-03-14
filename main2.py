@@ -48,7 +48,6 @@ def get_structure(id, force_upd=False):
         JOIN Filter_values on Structure.value_id=Filter_values.value_id
         JOIN Filter_types on Structure.filter_type=Filter_types.filter_type WHERE database = ?
         ''', (id, ))
-        #cur_str.execute('SELECT ﻿filter_id, filter_title, value_id, value_title, filter_type FROM Structure WHERE database=?', (id, ))
         filters = pd.DataFrame(cur_str, columns = clmns)
         filters['filter_id'] = filters.filter_id.astype(str)
         filters['value_id'] = filters.value_id.astype(str)
@@ -151,6 +150,13 @@ def make_query(filterdata):
         query_json.setdefault(i[0], []).append(i[1])
     return query_json
 
+def index_appender(list):
+    newlist = []
+    for i, v in enumerate(list):
+        totalcount = list.count(v)
+        count = list[:i].count(v)
+        newlist.append(v + str(count + 1) if totalcount > 1 else v)
+    return newlist
 
 def parse_sdmx(response, id, force_upd = False):
     # decode .sdmx data parse document tree
@@ -163,6 +169,10 @@ def parse_sdmx(response, id, force_upd = False):
         tree = ET.fromstring(data)
     except:
         return
+    conn = sqlite3.connect('data.sqlite')
+    cur = conn.cursor()
+    conn_str = sqlite3.connect('structure.sqlite')
+    cur_str = conn_str.cursor()
     # define namespace corrsepondences to correctly parse xml data
     ns = {'common': 'http://www.SDMX.org/resources/SDMXML/schemas/v1_0/common',
           'compact': 'http://www.SDMX.org/resources/SDMXML/schemas/v1_0/compact',
@@ -201,9 +211,14 @@ def parse_sdmx(response, id, force_upd = False):
             temp.append(node.text)
         fields_values.append(temp)
 
+    # rename possible duplicates caused by internal rosstat code changes for Sibersky & Dalnevostochny Federal Districts
+    idx = fields_id.index('s_OKATO')
+    fields_codes[idx] = [w.replace('035', '041') for w in fields_codes[idx]]
+    fields_codes[idx] = [w.replace('036', '042') for w in fields_codes[idx]]
+
     # extract data from the xml structure
     # begin with table creation
-    script = 'CREATE TABLE IF NOT EXISTS Data' + str(id) + ' (id INTEGER PRIMARY KEY AUTOINCREMENT UNIQUE, Time TEXT, Value TEXT)'
+    script = 'CREATE TABLE IF NOT EXISTS Data' + str(id) + ' (id INTEGER PRIMARY KEY AUTOINCREMENT UNIQUE, Time INTEGER, Value REAL)'
     cur.executescript(script)
     order = list()
     cur.execute('SELECT max(id) FROM Data' + str(id))
@@ -214,48 +229,59 @@ def parse_sdmx(response, id, force_upd = False):
     for node in tree.findall('DataSet/generic:Series[generic:SeriesKey]', ns)[0]:
         for child in node.findall('generic:Value/[@concept]', ns):
             feature = child.attrib["concept"]
-            script = 'CREATE TABLE IF NOT EXISTS ' + str(feature) + ' (id INTEGER PRIMARY KEY AUTOINCREMENT UNIQUE, fed_id TEXT UNIQUE, fed_title TEXT)'
+            script = 'CREATE TABLE IF NOT EXISTS ' + str(
+                feature) + ' (id INTEGER PRIMARY KEY AUTOINCREMENT UNIQUE, fed_id TEXT UNIQUE, fed_title TEXT UNIQUE)'
             cur.executescript(script)
             order.append(feature)
-            #need to check if DB already exists
+            # need to check if table in the DB already exists
             if r is not None:
-                a=0
+                a = 0
             else:
                 script = 'ALTER TABLE Data' + str(id) + ' ADD ' + str(feature)
                 cur.execute(script)
     conn.commit()
     #now we know names of columns
     colnames = order + ["TIME", "VALUE"]
-    #send filter data to Db
+    #send all filter data to DB
     for i in range(0, len(fields_id)):
         c = fields_id[i] #save filtername we are working with
         for j in range(0, len(fields_values[i])): #iterate trough all values for each filter
             script = 'INSERT OR IGNORE INTO ' + str(c) + ' (fed_id, fed_title) VALUES ( ?, ? )' #add filter decoders into DB
-            cur.execute(script, (str(fields_codes[i][j]), str(fields_values[i][j])) )
+            cur.execute(script, (fields_codes[i][j], str(fields_values[i][j])) )
+    # save filter data for EI and PERIOD
+    for node in tree.findall('DataSet/generic:Series/generic:Attributes', ns):
+        for child in node.findall('generic:Value/[@concept]', ns):
+            feature = child.attrib["concept"]
+            value =  child.attrib["value"]
+            script = 'INSERT OR IGNORE INTO ' + str(
+                feature) + ' (fed_title) VALUES (?)'
+            cur.execute(script, (value, ))
     conn.commit()
 
-    #datalist = list()
     for node in tree.findall('DataSet/generic:Series', ns):
-        #temp = list()
         temp_ds = []
         count = 0
         for child in node.findall('generic:SeriesKey//', ns):
-            #temp.append(child.attrib["value"])
             script = 'SELECT id FROM ' + fields_id[count] + ' WHERE fed_id=?' #build table relations
-            cur.execute(script, (child.attrib["value"], ))
+            v = child.attrib["value"]
+            if v == '035':
+                v = '041'
+            if v == '036':
+                v = '042'
+            cur.execute(script, (v, ))
             for item in cur:
                 temp_ds.append(item[0])
             count += 1
         for child in node.findall('generic:Attributes//', ns):
-            #temp.append(child.attrib["value"])
-            temp_ds.append(child.attrib["value"])
+            script = 'SELECT id FROM ' + child.attrib['concept'] + ' WHERE fed_title=?' #build table relations
+            cur.execute(script, (child.attrib["value"], ))
+            for item in cur:
+                temp_ds.append(item[0])
         for child in node.findall('generic:Obs/generic:Time', ns):
-            #temp.append(child.text)
-            temp_ds.append(child.text)
+            temp_ds.append(int(child.text))
         for child in node.findall('generic:Obs/generic:ObsValue', ns):
-            #temp.append(child.attrib["value"])
-            temp_ds.append(child.attrib["value"])
-        #datalist.append(temp)
+            value = re.sub(',', '.', child.attrib["value"])
+            temp_ds.append(float(value))
 
         #Create SQLite command for any number of columns
         script = 'INSERT INTO Data' + str(id) + ' ('
@@ -265,7 +291,7 @@ def parse_sdmx(response, id, force_upd = False):
             left = left + '?,'
         script = script.rstrip(' , ')
         left = left.rstrip(',') + ')'
-        script = script +  left
+        script = script + left
         RowToUpload = tuple(temp_ds)
         cur.execute(script, RowToUpload)
 
@@ -285,7 +311,7 @@ def parse_sdmx(response, id, force_upd = False):
     cols = ''
     for item in colnames:
         cols = cols + item + ';'
-    cur.execute('CREATE TABLE IF NOT EXISTS Metadata (id INTEGER PRIMARY KEY AUTOINCREMENT UNIQUE, dataset TEXT UNIQUE, columns TEXT, last_time TEXT)')
+    cur.execute('CREATE TABLE IF NOT EXISTS Metadata (id INTEGER PRIMARY KEY AUTOINCREMENT UNIQUE, dataset INTEGER UNIQUE, columns TEXT, last_time INTEGER)')
     #if metadata for this dataset already exists, do nothing, else append new row
     cur.execute('SELECT max(TIME) FROM Data' + str(id))
     row = cur.fetchone()
@@ -363,23 +389,30 @@ def load_data(id):
         colnames = row.split(';')
     colnames = colnames[:-1]
     beg = 'SELECT '
-    mid = 'FROM Data' + id
+    mid = 'FROM Data' + str(id)
     end = ' ON '
+    add = ['s_OKPD2', 's_OKPD', 's_OKATO']
     for col in colnames:
         try:
             cur.execute('SELECT max(id) FROM ' + col)
             row = cur.fetchone()
         except:
             row = None
-        if row is not None and col != 'PERIOD' and col != 'EI':
+        if row is not None:
             beg = beg + col + '.fed_title, '
+            if col in add:
+                beg = beg + col + '.fed_id, '
             mid = mid + ' JOIN ' + col
-            end = end + 'Data' + id + '.' + col + ' = ' + col + '.id ' + 'and '
+            end = end + 'Data' + str(id) + '.' + col + ' = ' + col + '.id ' + 'and '
         else:
-            beg = beg + 'Data' + id + '.' + col + ', '
+            beg = beg + 'Data' + str(id) + '.' + col + ', '
 
-    script = beg.rstrip(', ') + ' ' + mid + end[:-4] + ' ORDER BY Data' + id + '.TIME'
+    script = beg.rstrip(', ') + ' ' + mid + end[:-4] + ' ORDER BY Data' + str(id) + '.TIME'
     cur.execute(script)
+
+    for i in add:
+        if i in colnames:
+            colnames.insert(colnames.index(i)+1, i+'_id')
     result = pd.DataFrame(cur, columns = colnames)
     return result
 
@@ -429,8 +462,8 @@ def get_data(id, force_upd=False):
             #result.to_csv(str('data' + id + '.csv'), sep=';',
                           #encoding="utf-8-sig", index=False)
     elif force_upd and row is not None:
-        cur.execute('DROP TABLE Data' + id)
-        cur.execute('DELETE from Structure WHERE database=?', (id, ) )
+        cur.execute('DROP TABLE Data' + str(id))
+        cur_str.execute('DELETE from Structure WHERE database=?', (str(id), ) )
         result = query_splitter(filters, id)
         result.to_csv(str('data' + id + '.csv'), sep=';',
                      encoding="utf-8-sig", index=False)
