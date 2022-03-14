@@ -150,14 +150,6 @@ def make_query(filterdata):
         query_json.setdefault(i[0], []).append(i[1])
     return query_json
 
-def index_appender(list):
-    newlist = []
-    for i, v in enumerate(list):
-        totalcount = list.count(v)
-        count = list[:i].count(v)
-        newlist.append(v + str(count + 1) if totalcount > 1 else v)
-    return newlist
-
 def parse_sdmx(response, id, force_upd = False, nowrite=False):
     # decode .sdmx data parse document tree
     print('Reading data...')
@@ -209,73 +201,99 @@ def parse_sdmx(response, id, force_upd = False, nowrite=False):
     fields_codes[idx] = [w.replace('035', '041') for w in fields_codes[idx]]
     fields_codes[idx] = [w.replace('036', '042') for w in fields_codes[idx]]
     # extract data from the xml structure
-    # begin with table creation
-    script = 'CREATE TABLE IF NOT EXISTS Data' + str(id) + ' (id INTEGER PRIMARY KEY AUTOINCREMENT UNIQUE, Time INTEGER, Value REAL)'
-    cur.executescript(script)
     order = list()
-    cur.execute('SELECT max(id) FROM Data' + str(id))
-    try:
-        r = cur.fetchone()[0]
-    except:
-        r = None
+    # get all possible values for conventional filters
     for node in tree.findall('DataSet/generic:Series[generic:SeriesKey]', ns)[0]:
         for child in node.findall('generic:Value/[@concept]', ns):
             feature = child.attrib["concept"]
-            script = 'CREATE TABLE IF NOT EXISTS ' + str(
-                feature) + ' (id INTEGER PRIMARY KEY AUTOINCREMENT UNIQUE, fed_id TEXT UNIQUE, fed_title TEXT UNIQUE)'
-            cur.executescript(script)
             order.append(feature)
-            # need to check if table in the DB already exists
-            if r is not None:
-                a = 0
-            else:
-                script = 'ALTER TABLE Data' + str(id) + ' ADD ' + str(feature)
-                cur.execute(script)
-    conn.commit()
     #now we know names of columns
     colnames = order + ["TIME", "VALUE"]
-    #send all filter data to DB
-    for i in range(0, len(fields_id)):
-        c = fields_id[i] #save filtername we are working with
-        for j in range(0, len(fields_values[i])): #iterate trough all values for each filter
-            script = 'INSERT OR IGNORE INTO ' + str(c) + ' (fed_id, fed_title) VALUES ( ?, ? )' #add filter decoders into DB
-            cur.execute(script, (fields_codes[i][j], str(fields_values[i][j])) )
-    # save filter data for EI and PERIOD
+    # get all possible values for other filter
+    temp = list()
     for node in tree.findall('DataSet/generic:Series/generic:Attributes', ns):
         for child in node.findall('generic:Value/[@concept]', ns):
             feature = child.attrib["concept"]
-            value =  child.attrib["value"]
-            script = 'INSERT OR IGNORE INTO ' + str(
-                feature) + ' (fed_title) VALUES (?)'
-            cur.execute(script, (value, ))
-    conn.commit()
-
+            value = child.attrib["value"]
+            temp.append((feature, value))
+    temp = set(temp)
+    result = {}
+    for i in temp:
+        result.setdefault(i[0], []).append(i[1])
+    for i in range(0,len(list(result.keys()))):
+        fields_id.append(list(result.keys())[i])
+        fields_values.append(list(result.values())[i])
+        if list(result.keys())[i]=='PERIOD':
+            fields_title.append('Период')
+        elif list(result.keys())[i]=='EI':
+            fields_title.append('Единица измерения')
+    temp_df = list()
     for node in tree.findall('DataSet/generic:Series', ns):
         temp_ds = []
         count = 0
         for child in node.findall('generic:SeriesKey//', ns):
-            script = 'SELECT id FROM ' + fields_id[count] + ' WHERE fed_id=?' #build table relations
             v = child.attrib["value"]
             if v == '035':
                 v = '041'
             if v == '036':
                 v = '042'
-            cur.execute(script, (v, ))
-            for item in cur:
-                temp_ds.append(item[0])
+            temp_ds.append(v)
             count += 1
         for child in node.findall('generic:Attributes//', ns):
-            script = 'SELECT id FROM ' + child.attrib['concept'] + ' WHERE fed_title=?' #build table relations
-            cur.execute(script, (child.attrib["value"], ))
-            for item in cur:
-                temp_ds.append(item[0])
+            temp_ds.append(child.attrib["value"])
         for child in node.findall('generic:Obs/generic:Time', ns):
             temp_ds.append(int(child.text))
         for child in node.findall('generic:Obs/generic:ObsValue', ns):
             value = re.sub(',', '.', child.attrib["value"])
             temp_ds.append(float(value))
+        temp_df.append(temp_ds)
+    if not nowrite:
+        write_db(id, order, colnames, fields_id, fields_title, fields_values, fields_codes, temp_df)
+    else:
+        parsed = pd.DataFrame.from_records(temp_df, columns=colnames)
+        return parsed
 
-        #Create SQLite command for any number of columns
+
+def write_db(id, order, colnames, fields_id, fields_title, fields_values, fields_codes, df):
+    # begin with table creation
+    script = 'CREATE TABLE IF NOT EXISTS Data' + str(id) + ' (id INTEGER PRIMARY KEY AUTOINCREMENT UNIQUE, Time INTEGER, Value REAL)'
+    cur.executescript(script)
+    cur.execute('SELECT max(id) FROM Data' + str(id))
+    try:
+        r = cur.fetchone()[0]
+    except:
+        r = None
+    for i in order:
+        script = 'CREATE TABLE IF NOT EXISTS ' + str(i) + \
+                 ' (id INTEGER PRIMARY KEY AUTOINCREMENT UNIQUE, fed_id TEXT UNIQUE, fed_title TEXT UNIQUE)'
+        cur.executescript(script)
+        if r is None:
+           script = 'ALTER TABLE Data' + str(id) + ' ADD ' + str(i)
+           cur.execute(script)
+    for i in range(0, len(fields_id)):
+        c = fields_id[i] # save filtername we are working with
+        for j in range(0, len(fields_values[i])): #iterate trough all values for each filter
+            script = 'INSERT OR IGNORE INTO ' + str(c) + ' (fed_id, fed_title) VALUES ( ?, ? )' #add filter decoders into DB
+            if c not in ['EI', 'PERIOD']:
+                cur.execute(script, (fields_codes[i][j], str(fields_values[i][j])) )
+            else:
+                cur.execute(script, (None, str(fields_values[i][j])))
+    conn.commit()
+    for i in df:
+        count = 0
+        temp_ds = list()
+        for j in order:
+            if j not in ['EI', 'PERIOD']:
+                script = 'SELECT id FROM ' + j + ' WHERE fed_id=?'  # build table relations
+            else:
+                script = 'SELECT id FROM ' + j + ' WHERE fed_title=?'  # build table relations
+            cur.execute(script, (i[count],))
+            for item in cur:
+                temp_ds.append(item[0])
+            count += 1
+        # Create SQLite command for any number of columns
+        for z in i[-(len(colnames)-count):]:
+            temp_ds.append(z)
         script = 'INSERT INTO Data' + str(id) + ' ('
         left = ')  VALUES ('
         for col in colnames:
@@ -286,29 +304,23 @@ def parse_sdmx(response, id, force_upd = False, nowrite=False):
         script = script + left
         RowToUpload = tuple(temp_ds)
         cur.execute(script, RowToUpload)
-
     conn.commit()
-    #write all column names into a string
     cols = ''
     for item in colnames:
         cols = cols + item + ';'
-    cur.execute('CREATE TABLE IF NOT EXISTS Metadata (id INTEGER PRIMARY KEY AUTOINCREMENT UNIQUE, dataset INTEGER UNIQUE, columns TEXT, periods TEXT)')
-    #if metadata for this dataset already exists, do nothing, else append new row
-    # cur.execute('SELECT max(TIME) FROM Data' + str(id))
-    # row = cur.fetchone()
-    # for item in row:
-    #     t = item
+    cur.execute(
+        'CREATE TABLE IF NOT EXISTS Metadata (id INTEGER PRIMARY KEY AUTOINCREMENT UNIQUE, dataset INTEGER UNIQUE, columns TEXT, periods TEXT)')
+    # if metadata for this dataset already exists, do nothing, else append new row
     cur.execute('INSERT OR IGNORE INTO Metadata (dataset, columns) VALUES (?, ?)', (id, cols))
     conn.commit()
     parsed = load_data(id)
     last_upd = set(list(tuple(x) for x in parsed.loc[:, ["TIME", "PERIOD"]].values))
-    cur.execute('SELECT id FROM Metadata WHERE dataset = ?', (str(id), ))
+    cur.execute('SELECT id FROM Metadata WHERE dataset = ?', (str(id),))
     row = cur.fetchone()
     for item in row:
         meta_id = item
     cur.execute('UPDATE Metadata SET periods = ? WHERE id = ?', (str(last_upd), meta_id))
     conn.commit()
-    return parsed
 
 
 def query_splitter(filters, id, nowrite=False):
@@ -334,9 +346,8 @@ def query_splitter(filters, id, nowrite=False):
                     response = urlopen(request, timeout=300)
                     # EXCEPTION CATCHER NECESSARY
                     print('Data retrieved.')
-                    chunk_parsed = parse_sdmx(response, id, nowrite=nowrite)
-                    overall_df = pd.concat([overall_df, chunk_parsed])
-                    time.sleep(1.5)
+                    parse_sdmx(response, id, nowrite=nowrite)
+                    time.sleep(1)
                     # write to DB
             else:
                 query = make_query(subset)
@@ -348,12 +359,9 @@ def query_splitter(filters, id, nowrite=False):
                 response = urlopen(request, timeout=300)
                 # EXCEPTION CATCHER NECESSARY
                 print('Data retrieved.')
-                chunk_parsed = parse_sdmx(response, id, nowrite=nowrite)
-                #overall_df = pd.concat([overall_df, chunk_parsed])
-                time.sleep(1.5)
-                # WRITER HERE
+                parse_sdmx(response, id, nowrite=nowrite)
+                time.sleep(1)
     else:
-        #print(filters)
         query = make_query(filters)
         # send request
         print('Retrieving data...')
@@ -362,9 +370,11 @@ def query_splitter(filters, id, nowrite=False):
         response = urlopen(request, timeout=300)
         # EXCEPTION CATCHER NECESSARY
         print('Data retrieved.')
-        chunk_parsed = parse_sdmx(response, id, nowrite=nowrite)
-        overall_df = pd.concat([overall_df, chunk_parsed])
-    return overall_df
+        if nowrite:
+            parsed = parse_sdmx(response, id, nowrite=nowrite)
+            return parsed
+        else:
+            parse_sdmx(response, id, nowrite=nowrite)
 
 def load_data(id):
     cur.execute('SELECT columns FROM Metadata WHERE dataset=?', (id, ))
@@ -393,7 +403,6 @@ def load_data(id):
 
     script = beg.rstrip(', ') + ' ' + mid + end[:-4] + ' ORDER BY Data' + str(id) + '.TIME'
     cur.execute(script)
-
     for i in add:
         if i in colnames:
             colnames.insert(colnames.index(i)+1, i+'_id')
@@ -411,8 +420,6 @@ def get_data(id, force_upd=False):
     except:
         row = None
     if row is not None and not force_upd:
-        #overall_df = load_data(id)
-        #print('Data retrieved.')
         # get last updated date on server
         upd = get_periods(id)
         # get last updated date locally
@@ -420,11 +427,11 @@ def get_data(id, force_upd=False):
         row = cur.fetchone()
         for item in row:
             last_upd = eval(item)
-        #last_upd = set(list(tuple(x) for x in overall_df.loc[:, ["TIME", "PERIOD"]].values))
         # check which dates are present on server and are not downloaded
         missing = [x for x in upd if x not in last_upd]
         if len(missing) == 0:
-            return load_data(id)
+            print('There are currently no new values to append. Use load_data() to get data')
+            #return load_data(id)
         else:
             # get period ids dictionary to map value to ids
             period_ids = dict(filters.loc[filters["filter_id"] == '33560', ["value_id", "value_title"]].values.tolist())
@@ -441,17 +448,14 @@ def get_data(id, force_upd=False):
             temp = pd.DataFrame(templist, columns=filters.columns)
             # change the filters to load missing dates
             filters_augm = pd.concat([filters.loc[(filters["filter_id"] != "3") & (filters["filter_id"] != "33560")], temp])
-            result = query_splitter(filters_augm, id)
-            #result = pd.concat([overall_df, result])
-            #result = result.drop_duplicates()
+            query_splitter(filters_augm, id)
     elif force_upd and row is not None:
         cur.execute('DROP TABLE Data' + str(id))
         cur_str.execute('DELETE from Structure WHERE database=?', (str(id), ) )
-        result = query_splitter(filters, id)
+        query_splitter(filters, id)
     elif row is None:
-        result = query_splitter(filters, id)
+        query_splitter(filters, id)
     print('Data processing successful.')
-    print(result.head(2))
 
 
 def get_periods(id):
