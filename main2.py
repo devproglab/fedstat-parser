@@ -268,7 +268,7 @@ def write_db(id, order, colnames, fields_id, fields_title, fields_values, fields
                  ' (id INTEGER PRIMARY KEY AUTOINCREMENT UNIQUE, fed_id TEXT UNIQUE, fed_title TEXT UNIQUE)'
         cur.executescript(script)
         if r is None:
-           script = 'ALTER TABLE Data' + str(id) + ' ADD ' + str(i)
+           script = 'ALTER TABLE Data' + str(id) + ' ADD ' + str(i) + 'INTEGER'
            cur.execute(script)
     for i in range(0, len(fields_id)):
         c = fields_id[i] # save filtername we are working with
