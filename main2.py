@@ -20,10 +20,13 @@ except:
     print(
         'Error: some of the required packages are missing. Please install them.')
     exit()
-conn = sqlite3.connect('data.sqlite')
-cur = conn.cursor()
-conn_str = sqlite3.connect('structure.sqlite')
-cur_str = conn_str.cursor()
+try:
+    conn = sqlite3.connect('data.sqlite')
+    cur = conn.cursor()
+    conn_str = sqlite3.connect('structure.sqlite')
+    cur_str = conn_str.cursor()
+except:
+    print('Failed to connect to SQL database')
 
 def get_structure(id, force_upd=False):
     cur_str.execute('''CREATE TABLE IF NOT EXISTS Structure
@@ -41,9 +44,9 @@ def get_structure(id, force_upd=False):
     if row is not None and not force_upd:
         print('Reading data structure...')
         clmns = ['filter_id', 'fiter_title', 'value_id', 'value_title', 'filter_type']
-        cur_str.execute('''SELECT Structure.filter_id, Filters.filter_title, Structure.value_id, Filter_values.value_title, 
-        Filter_types.filter_type_title 
-        FROM Structure 
+        cur_str.execute('''SELECT Structure.filter_id, Filters.filter_title, Structure.value_id, Filter_values.value_title,
+        Filter_types.filter_type_title
+        FROM Structure
         JOIN Filters on Structure.filter_id=Filters.filter_id
         JOIN Filter_values on Structure.value_id=Filter_values.value_id
         JOIN Filter_types on Structure.filter_type=Filter_types.filter_type WHERE database = ?
@@ -64,12 +67,19 @@ def get_structure(id, force_upd=False):
         except socket.timeout:
             print('Socket timed out - URL:', url)
             exit()
+        except:
+            print('Data structure not retrieved. Check your internet connection')
+            exit()
         else:
             data = response.read().decode()
             print('Processing data structure...')
             # extract the necessary part from raw javascript and modify it to be proper json
             pattern = re.compile(r"title:(.+?)\}\);", re.DOTALL | re.MULTILINE)
-            results = pattern.findall(data)[0].strip()
+            try:
+                results = pattern.findall(data)[0].strip()
+            except:
+                print('Wrong dataset id. Please try again')
+                user_interface()
             results = '{"title":' + results + '}'
             # transform double-escape unicode characters to proper text
             results = codecs.decode(results, 'unicode-escape')
@@ -268,7 +278,7 @@ def write_db(id, order, colnames, fields_id, fields_title, fields_values, fields
                  ' (id INTEGER PRIMARY KEY AUTOINCREMENT UNIQUE, fed_id TEXT UNIQUE, fed_title TEXT UNIQUE)'
         cur.executescript(script)
         if r is None:
-           script = 'ALTER TABLE Data' + str(id) + ' ADD ' + str(i) + 'INTEGER'
+           script = 'ALTER TABLE Data' + str(id) + ' ADD ' + str(i) + ' INTEGER'
            cur.execute(script)
     for i in range(0, len(fields_id)):
         c = fields_id[i] # save filtername we are working with
@@ -356,20 +366,29 @@ def query_splitter(filters, id, nowrite=False):
                 print('Downloading data, chunk ' + str(counter) + ' out of ' + str(len(years)))
                 request = Request('https://fedstat.ru/indicator/data.do?format=sdmx',
                                   urlencode(query, doseq=True).encode())
-                response = urlopen(request, timeout=300)
-                # EXCEPTION CATCHER NECESSARY
-                print('Data retrieved.')
-                parse_sdmx(response, id, nowrite=nowrite)
-                time.sleep(1)
+                try:
+                    response = urlopen(request, timeout=300)
+                    print('Data retrieved.')
+                    parse_sdmx(response, id, nowrite=nowrite)
+                    time.sleep(1)
+                except:
+                    print('Failed to retrieve data from FedStat. Please try later')
+                    exit()
     else:
         query = make_query(filters)
         # send request
         print('Retrieving data...')
         request = Request('https://fedstat.ru/indicator/data.do?format=sdmx',
                           urlencode(query, doseq=True).encode())
-        response = urlopen(request, timeout=300)
-        # EXCEPTION CATCHER NECESSARY
-        print('Data retrieved.')
+        try:
+            response = urlopen(request, timeout=300)
+            print('Data retrieved.')
+            parse_sdmx(response, id, nowrite=nowrite)
+            time.sleep(1)
+            print('Data retrieved.')
+        except:
+            print('Failed to retrieve data from FedStat. Please try later')
+            exit()
         if nowrite:
             parsed = parse_sdmx(response, id, nowrite=nowrite)
             return parsed
@@ -470,11 +489,19 @@ def get_periods(id):
         periods.append(r)
     return set(periods)
 
+def user_interface():
+    print('Press Ctrl+C to exit')
+    a = ''
+    while a == '':
+        try:
+            print('Which data do you want to work with?')
+            print('34118 - housing data, 58971 - food, 31452 - more housing data')
+            id = str(input())
+            parsed = get_data(id)
+            print('Data downloaded into data.sqlite')
+            print('Press Ctrl+C to exit. Press Enter to load new data')
+            a = str(input())
+        except KeyboardInterrupt:
+            exit()
 
-
-print('Which data do you want to work with?')
-print('34118 - housing data, 58971 - food, 31452 - more housing data')
-id = str(input())
-parsed = get_data(id) #31074 s bad
-#parsed = get_data("58971", force_upd=True)
-#parsed = get_periods(id)
+user_interface()
