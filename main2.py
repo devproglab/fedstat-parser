@@ -325,6 +325,14 @@ def write_db(id, order, colnames, fields_id, fields_title, fields_values,
     for i in range(0, len(fields_id)):
         # save filtername we are working with
         c = fields_id[i]
+        # map filter ids to human-readable titles
+        script = 'CREATE TABLE IF NOT EXISTS Filternames \
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT UNIQUE, \
+                 field_id TEXT UNIQUE, field_title TEXT)'
+        cur.executescript(script)
+        script = 'INSERT OR IGNORE INTO Filternames (field_id, field_title) ' \
+                 'VALUES ( ?, ? )'
+        cur.execute(script, (fields_id[i], fields_title[i]))
         # iterate trough all values for each filter
         for j in range(0, len(fields_values[i])):
             # add filter decoders into DB
@@ -456,6 +464,8 @@ def load_data(id):
     beg = 'SELECT '
     mid = 'FROM Data' + str(id)
     end = ' ON '
+    # for some filter fields it can be more convenient for the user to have codes instead of text values
+    # so we add these fields to the output
     add = ['s_OKPD2', 's_OKPD', 's_OKATO']
     for col in colnames:
         try:
@@ -474,9 +484,11 @@ def load_data(id):
 
     script = beg.rstrip(', ') + ' ' + mid + end[:-4] + ' ORDER BY Data' + str(id) + '.TIME'
     cur.execute(script)
+    # rename fields with codes so that there are no duplicates
     for i in add:
         if i in colnames:
             colnames.insert(colnames.index(i)+1, i+'_id')
+
     result = pd.DataFrame(cur, columns=colnames)
     return result
 
