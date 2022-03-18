@@ -320,7 +320,7 @@ def write_db(id, order, colnames, fields_id, fields_title, fields_values,
                  fed_id TEXT UNIQUE, fed_title TEXT UNIQUE)'
         cur.executescript(script)
         if r is None:
-            script = 'ALTER TABLE Data' + str(id) + 'ADD' + str(i) + 'INTEGER'
+            script = 'ALTER TABLE Data' + str(id) + ' ADD ' + str(i) + ' INTEGER'
             cur.execute(script)
     for i in range(0, len(fields_id)):
         # save filtername we are working with
@@ -436,9 +436,6 @@ def query_splitter(filters, id, nowrite=False):
                           urlencode(query, doseq=True).encode())
         try:
             response = urlopen(request, timeout=300)
-            print('Data retrieved.')
-            parse_sdmx(response, id, nowrite=nowrite)
-            time.sleep(1)
             print('Data retrieved.')
         except:
             print('Failed to retrieve data from FedStat. Please try later')
