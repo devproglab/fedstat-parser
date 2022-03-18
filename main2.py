@@ -391,7 +391,7 @@ def write_db(id, order, colnames, fields_id, fields_title, fields_values,
     cur.execute('INSERT OR IGNORE INTO Metadata \
     (dataset, columns) VALUES (?, ?)', (id, cols))
     conn.commit()
-    parsed = load_data(id)
+    parsed = load_data(id)[0]
     last_upd = set(list(tuple(x) for x in parsed.loc[:, ["TIME", "PERIOD"]].values))
     cur.execute('SELECT id FROM Metadata WHERE dataset = ?', (str(id),))
     row = cur.fetchone()
