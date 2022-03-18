@@ -333,6 +333,14 @@ def write_db(id, order, colnames, fields_id, fields_title, fields_values,
         script = 'INSERT OR IGNORE INTO Filternames (field_id, field_title) ' \
                  'VALUES ( ?, ? )'
         cur.execute(script, (fields_id[i], fields_title[i]))
+        # add some predetermined names as well
+        script = 'INSERT OR IGNORE INTO Filternames (field_id, field_title) ' \
+                 'VALUES ("TIME", "Год")'
+        cur.execute(script)
+        script = 'INSERT OR IGNORE INTO Filternames (field_id, field_title) ' \
+                 'VALUES ("VALUE", "Значение")'
+        cur.execute(script)
+
         # iterate trough all values for each filter
         for j in range(0, len(fields_values[i])):
             # add filter decoders into DB
@@ -488,9 +496,22 @@ def load_data(id):
     for i in add:
         if i in colnames:
             colnames.insert(colnames.index(i)+1, i+'_id')
-
+    # load data into dataframe
     result = pd.DataFrame(cur, columns=colnames)
-    return result
+    # now we select human-readable titles for filter values
+    titles = list()
+    for i in colnames:
+        script = 'SELECT field_title FROM Filternames WHERE field_id = ?'
+        cur.execute(script, (i, ))
+        try:
+            row = cur.fetchone()[0]
+        except:
+            row = None
+        if row is None:
+            titles.append(i)
+        else:
+            titles.append(row)
+    return [result, titles]
 
 
 def get_data(id, force_upd=False):
