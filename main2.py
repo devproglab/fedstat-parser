@@ -536,11 +536,7 @@ def get_data(id, force_upd=False):
             last_upd = eval(item)
         # check which dates are present on server and are not downloaded
         missing = [x for x in upd if x not in last_upd]
-        if len(missing) == 0:
-            print('There are currently no new values to append. \
-            Use load_data() to get data')
-            # return load_data(id)
-        else:
+        if len(missing) != 0:
             # get period ids dictionary to map value to ids
             period_ids = dict(filters.loc[filters["filter_id"] == '33560',
                                                  ["value_id",
@@ -583,22 +579,55 @@ def get_periods(id):
         periods.append(r)
     return set(periods)
 
+def monetary_value():
+    # 34118 - area intoduced
+    get_data('34118')
+    [area, area_col] = load_data('34118')
+    s_mosh = 'Жилые здания многоквартирные'
+    # 31452 - average price
+    get_data('31452')
+    [price, price_col] = load_data('31452')
+    s_vidryn = 'Первичный рынок жилья'
+    s_OKATO = ['Центральный федеральный округ', 'Северо-Западный федеральный округ',
+               'Южный федеральный округ (с 29.07.2016)', 'Северо-Кавказский федеральный округ',
+               'Приволжский федеральный округ', 'Уральский федеральный округ',
+               'Сибирский федеральный округ', 'Дальневосточный федеральный округ']
+    S_TIPKVARTIR = 1
+    PERIOD = ['I квартал', 'II квартал', 'III квартал', 'IV квартал']
+    years = [2019, 2020, 2021]
+
+
+
+
 
 def user_interface():
     print('Press Ctrl+C to exit')
     a = ''
     while a == '':
         try:
+            # print('''Which report would you like to get? \n 1. Monetary Value of New Flats ''')
+            # rep = input('Enter the number of report: ')
+            # if rep == 1:
+            #     monetary_value()
+
+
+            # if rep == 1:
+            #     print('Do you want to show by region[1] or Federal District[2]?')
+            #     reg = int(input('Enter type 1 or 2: '))
+            #     monetary_value(reg)
+            # elif rep == 2:
+            #     exit()
             print('Which data do you want to work with?')
-            print('34118 - housing data, 58971 - food, \
+            print('34118 - housing data, \
             31452 - more housing data')
             id = str(input())
-            parsed = get_data(id)
+            get_data(id)
             print('Data downloaded into data.sqlite')
             print('Press Ctrl+C to exit. Press Enter to load new data')
             a = str(input())
+
         except KeyboardInterrupt:
             exit()
 
 
-user_interface()
+# user_interface()
