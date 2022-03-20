@@ -684,8 +684,7 @@ def monthly_introduction():
               'июль', 'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь']
     area = area[area['PERIOD'].isin(PERIOD)]
 
-    # area.PERIOD = area.PERIOD.astype('category')
-    # area.PERIOD.cat.set_categories(PERIOD)
+    # categorize months for the sort
     area['PERIOD'] = pd.Categorical(area['PERIOD'], categories=PERIOD, ordered=True)
     area.sort_values(['s_OKATO', 'TIME', 'PERIOD'])
 
@@ -698,10 +697,15 @@ def monthly_introduction():
     # Replace technical names with human-readable
     area = area.rename(columns=name_dict)
 
-    area_pivot = area.pivot(index=['Federal District', 'Type of Building'], columns=['Year', 'Period'], values='Area Introduced')
+    area_pivot = area.pivot(index=['Federal District', 'Type of Building'],
+                            columns=['Year', 'Period'], values='Area Introduced')
     area_pivot.to_csv('Area Introduced Monthly.csv', encoding='utf-8')
 
     print(area_pivot)
+
+
+def monthly_prices():
+
 
 def user_interface():
     print('Press Ctrl+C to exit')
@@ -716,6 +720,8 @@ def user_interface():
                 monetary_value()
             elif rep == 2:
                 monthly_introduction()
+            elif rep == 3:
+                monthly_prices()
 
 
             # if rep == 1:
