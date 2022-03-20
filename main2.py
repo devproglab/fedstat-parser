@@ -815,8 +815,7 @@ def monetary_value():
 
     # associate technical column names with human-readable column names
     col_names = ['TIME', 'PERIOD', 's_OKATO', 's_OKATO_id_x', 's_vidryn', 's_mosh', 'EI_x', 'EI_y', 'VALUE_x',
-                 'VALUE_y',
-                 'S_TIPKVARTIR']
+                 'VALUE_y', 'S_TIPKVARTIR']
     nice_names = ['Year', 'Period', 'Federal District', 'Federal District (id)', 'Type of Market', 'Type of Building',
                   'Unit of Price', 'Unit of Area', 'Average Price', 'Area Introduced', 'Type of Flats']
     name_dict = dict(zip(col_names, nice_names))
@@ -861,7 +860,7 @@ def monthly_introduction():
     area.sort_values(['s_OKATO', 'TIME', 'PERIOD'])
 
     # associate technical names with human-readable
-    col_names = ['TIME', 'PERIOD', 's_OKATO', 's_OKATO_id_x', 's_mosh', 'EI', 'VALUE']
+    col_names = ['TIME', 'PERIOD', 's_OKATO', 's_OKATO_id', 's_mosh', 'EI', 'VALUE']
     nice_names = ['Year', 'Period', 'Federal District', 'Federal District (id)', 'Type of Building',
                   'Unit of Area', 'Area Introduced']
     name_dict = dict(zip(col_names, nice_names))
@@ -871,12 +870,25 @@ def monthly_introduction():
 
     area_pivot = area.pivot(index=['Federal District', 'Type of Building'],
                             columns=['Year', 'Period'], values='Area Introduced')
+    # Output
     area_pivot.to_csv('Area Introduced Monthly.csv', encoding='utf-8')
-
     print(area_pivot)
 
 
-# def monthly_prices():
+def monthly_prices():
+    get_data('31452')
+    [prices, titles] = load_data('31452')
+    prices.sort([['s_OKATO', 'TIME', 'PERIOD']])
+
+    # associate technical names with human-readable
+    col_names = ['TIME', 'PERIOD', 's_OKATO', 's_OKATO_id', 's_mosh', 'EI', 'VALUE']
+    nice_names = ['Year', 'Period', 'Federal District', 'Federal District (id)', 'Type of Building',
+                  'Unit of Area', 'Area Introduced']
+    name_dict = dict(zip(col_names, nice_names))
+
+    prices = prices.rename(columns=name_dict)
+
+
 
 def user_interface():
     """Asks the user to enter id of a FedStat indicator to make reports on.
@@ -905,7 +917,7 @@ def user_interface():
             elif rep == 2:
                 monthly_introduction()
             elif rep == 3:
-
+                monthly_prices()
             print('Press Ctrl+C to exit. Press Enter to make a new report')
             a = str(input())
         except KeyboardInterrupt:
