@@ -849,22 +849,6 @@ def monetary_value():
         print('\n', i, '\n')
 
 
-
-def user_interface():
-    """Asks the user to enter id of a FedStat indicator to make reports on.
-    Then proceeds to fetch the data from FedStat and writes it into the database.
-    If there is no data on FedStat website that is not already in the database,
-    data gets loaded from the database right away.
-    If the user presses Enter, asks for a new indicator id.
-
-    If the user presses Ctrl+C, stops.
-
-    Knowledge from Coursera courses:
-    Course 1 Programming for Everybody for declaring a function,
-    using 'for' loops and conditional 'if' statements.
-    Course 2 Python Data Structures for working with strings.
-    """
-
 def monthly_introduction():
     get_data('34118')
     [area, titles_area] = load_data('34118')
@@ -894,7 +878,20 @@ def monthly_introduction():
 
 # def monthly_prices():
 
+def user_interface():
+    """Asks the user to enter id of a FedStat indicator to make reports on.
+    Then proceeds to fetch the data from FedStat and writes it into the database.
+    If there is no data on FedStat website that is not already in the database,
+    data gets loaded from the database right away.
+    If the user presses Enter, asks for a new indicator id.
 
+    If the user presses Ctrl+C, stops.
+
+    Knowledge from Coursera courses:
+    Course 1 Programming for Everybody for declaring a function,
+    using 'for' loops and conditional 'if' statements.
+    Course 2 Python Data Structures for working with strings.
+    """
     print('Press Ctrl+C to exit')
     a = ''
     while a == '':
@@ -908,29 +905,8 @@ def monthly_introduction():
             elif rep == 2:
                 monthly_introduction()
             elif rep == 3:
-# monthly_prices()
 
-
-            # if rep == 1:
-            #     print('Do you want to show by region[1] or Federal District[2]?')
-            #     reg = int(input('Enter type 1 or 2: '))
-            #     monetary_value(reg)
-            # elif rep == 2:
-            #     exit()
-            # print('Which data do you want to work with?')
-            # print('34118 - housing data, \
-            # 31452 - more housing data')
-            # id = str(input())
-            # get_data(id)
-            # print('Data downloaded into data.sqlite')
-
-            print('Which data do you want to work with?')
-            print('34118 - housing data, 58971 - food, \
-            31452 - more housing data')
-            id = str(input())
-            parsed = get_data(id)
-            print('Data downloaded into data.sqlite')
-            print('Press Ctrl+C to exit. Press Enter to load new data')
+            print('Press Ctrl+C to exit. Press Enter to make a new report')
             a = str(input())
         except KeyboardInterrupt:
             exit()
