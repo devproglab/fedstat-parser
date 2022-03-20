@@ -5,6 +5,8 @@ Pylint rated the code 8.08/10
 """
 from sys import exit
 
+import numpy as np
+
 try:
     import os.path
     import urllib.request
@@ -812,11 +814,8 @@ def monetary_value():
                              right_on=['s_OKATO', 'TIME', 'PERIOD'])
 
     # Calculate monetary value
-    monetary = pd.Series([], dtype='float64')
-    for i in range(len(price_area)):
-        monetary[i] = price_area['VALUE_x'][i] * price_area['VALUE_y'][i] / 1000
-    monetary = monetary.round(2)
-    price_area.insert(5, "Monetary Value in RUB, millions", monetary)
+    price_area.insert(5, "Monetary Value in RUB, millions",
+                      price_area['VALUE_x'].multiply(price_area['VALUE_y']) / 1000)
 
     # clean up the data
     price_area = price_area.drop(columns='s_OKATO_id_y')
@@ -879,14 +878,14 @@ def monthly_introduction():
 
     # associate technical names with human-readable
     col_names = ['TIME', 'PERIOD', 's_OKATO', 's_OKATO_id', 's_mosh', 'EI', 'VALUE']
-    nice_names = ['Year', 'Period', 'Federal District', 'Federal District (id)',
+    nice_names = ['Year', 'Period', 'Region', 'Federal District (id)',
                   'Type of Building', 'Unit of Area', 'Area Introduced']
     name_dict = dict(zip(col_names, nice_names))
 
     # Replace technical names with human-readable
     area = area.rename(columns=name_dict)
 
-    area_pivot = area.pivot(index=['Federal District', 'Type of Building'],
+    area_pivot = area.pivot(index=['Region', 'Type of Building'],
                             columns=['Year', 'Period'], values='Area Introduced')
     # Output
     area_pivot.to_csv('Monthly Housing Construction.csv', encoding='utf-8')
@@ -914,13 +913,13 @@ def quarterly_prices():
 
     # associate technical names with human-readable
     col_names = ['TIME', 'PERIOD', 's_OKATO', 's_OKATO_id', 's_vidryn', 'EI', 'VALUE', 'S_TIPKVARTIR']
-    nice_names = ['Year', 'Period', 'Federal District', 'Federal District (id)', 'Type of Market',
+    nice_names = ['Year', 'Period', 'Region', 'Federal District (id)', 'Type of Market',
                   'Unit of Price', 'Average Price', 'Type of Flats']
     name_dict = dict(zip(col_names, nice_names))
 
     prices = prices.rename(columns=name_dict)
     # print(prices.head())
-    prices_pivot = prices.pivot(index=['Federal District', 'Type of Market'],
+    prices_pivot = prices.pivot(index=['Region', 'Type of Market'],
                                 columns=['Year', 'Period'],
                                 values='Average Price')
     # Output
