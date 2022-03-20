@@ -681,11 +681,14 @@ def monthly_introduction():
     get_data('34118')
     [area, titles_area] = load_data('34118')
     PERIOD = ['январь', 'февраль', 'март', 'апрель', 'май', 'июнь',
-              'июль', 'август', 'сентябрь' 'октябрь', 'ноябрь', 'декабрь']
+              'июль', 'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь']
     area = area[area['PERIOD'].isin(PERIOD)]
-    area.PERIOD = area.PERIOD.astype('category')
-    area.PERIOD.cat.set_categories(PERIOD)
+
+    # area.PERIOD = area.PERIOD.astype('category')
+    # area.PERIOD.cat.set_categories(PERIOD)
+    area['PERIOD'] = pd.Categorical(area['PERIOD'], categories=PERIOD, ordered=True)
     area.sort_values(['s_OKATO', 'TIME', 'PERIOD'])
+
     # associate technical names with human-readable
     col_names = ['TIME', 'PERIOD', 's_OKATO', 's_OKATO_id_x', 's_mosh', 'EI', 'VALUE']
     nice_names = ['Year', 'Period', 'Federal District', 'Federal District (id)', 'Type of Building',

@@ -11,6 +11,7 @@ PERIOD = ['январь', 'февраль', 'март', 'апрель', 'май'
 area = area[area['PERIOD'].isin(PERIOD)]
 area.PERIOD = area.PERIOD.astype('category')
 area.PERIOD.cat.set_categories(PERIOD)
+
 area.sort_values(['s_OKATO', 'TIME', 'PERIOD'])
 # associate technical names with human-readable
 col_names = ['TIME', 'PERIOD', 's_OKATO', 's_OKATO_id_x', 's_mosh', 'EI', 'VALUE']
