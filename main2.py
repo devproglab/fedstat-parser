@@ -1,3 +1,8 @@
+"""The program is meant to facilitate the uploading of data from fedstat.ru
+in order to create reports on indicators chosen by the user.
+
+Pylint rated the code 7.62/10
+"""
 from sys import exit
 
 try:
@@ -18,7 +23,7 @@ try:
     import sqlite3
 except:
     print(
-      'Error: some of the required packages are missing. Please install them.')
+        'Error: some of the required packages are missing. Please install them.')
     exit()
 try:
     conn = sqlite3.connect('data.sqlite')
@@ -30,6 +35,27 @@ except:
 
 
 def get_structure(id, force_upd=False):
+    """Retreives data structure either from an existing structure database
+    or FedStat website.
+
+    Parameters:
+    id (str): id of a FedStat indicator.
+    force_upd (bool): If True, data in the database gets updated.
+
+    Returns:
+    filters (pandas.core.frame.DataFrame): A dataframe with filters
+    used by FedStat for their data.
+
+    Knowledge from Coursera courses:
+    Course 1 Programming for Everybody for declaring a function,
+    using a 'for' loop and conditional 'if' statements.
+    Course 2 Python Data Structures for working with different data structures
+    (strings, lists, and dictionaries).
+    Course 3 Using Python to Access Web Data for retreiving data
+    from FedStat website and using regular expressions.
+    Course 4 Using Databases with Python for
+    creating a database with data structure.
+    """
     cur_str.execute('''CREATE TABLE IF NOT EXISTS Structure
         (id INTEGER PRIMARY KEY, database INTEGER, filter_id INTEGER,
          value_id INTEGER, filter_type INTEGER)''')
@@ -172,11 +198,37 @@ def get_structure(id, force_upd=False):
 
 
 def query_size(filterdata):
+    """Counts how many filters' values there are to determine
+    a size of a query needed.
+
+    Parameters:
+    filterdata (pandas.core.frame.DataFrame): A dataframe with FedStat filters.
+
+    Returns:
+    S (int): The query size, the number of filters.
+
+    Knowledge from Coursera courses:
+    Course 1 Programming for Everybody for declaring a function.
+    """
     S = filterdata['filter_id'].value_counts().values.prod()
     return S
 
 
 def make_query(filterdata):
+    """Creates a json-style request that will be used to get data from a server.
+
+    Parameters:
+    filterdata (pandas.core.frame.DataFrame): A dataframe with FedStat filters.
+
+    Returns:
+    query_json (dict): A query in a form of a json-style request.
+
+    Knowledge from Coursera courses:
+    Course 1 Programming for Everybody for declaring a function
+    and using 'for' loops.
+    Course 2 Python Data Structures for working with different data structures
+    (strings, lists, and dictionaries).
+    """
     # concatenate filter ids and filter value ids for the query
     p = [str(m) + "_" + str(n) for m, n in zip([val[0] for val in filterdata[["filter_id"]].values.tolist()],
                                                [val[0] for val in filterdata[["value_id"]].values.tolist()])]
@@ -185,7 +237,7 @@ def make_query(filterdata):
     meta = filterdata.loc[filterdata["filter_id"] == '0'].values[0]
     query = [('id', meta[2]),
              ('title', meta[3])] + filterdata.drop_duplicates(
-        subset=["filter_id"]).loc[:, ['filter_type', 'filter_id']].to_records(index=None).tolist() \
+             subset=["filter_id"]).loc[:, ['filter_type', 'filter_id']].to_records(index=None).tolist() \
         + list(zip([['selectedFilterIds'] * len(p)][0], p))
     # format query to json-styled request accepted by the server
     query_json = {}
@@ -194,7 +246,32 @@ def make_query(filterdata):
     return query_json
 
 
-def parse_sdmx(response, id, force_upd=False, nowrite=False):
+def parse_sdmx(response, id, nowrite=False):
+    """Goes through a datafile received from FedStat and arranges the data
+    in an appropriate manner to be written into the database.
+    If nowrite=False the data is written into the database,
+    if nowrite=True the data is returned in a dataframe.
+
+    Parameters:
+    response (urlib.response): An object with data uploaded
+    from FedStat website by sending a request to the server.
+    id (str): id of a FedStat indicator.
+    nowrite (bool): If False, the parsed data is written into the database.
+
+    Returns:
+    parsed (pandas.core.frame.DataFrame): A dataframe with parsed data
+    from FedStat.
+
+    Knowledge from Coursera courses:
+    Course 1 Programming for Everybody for declaring a function,
+    using 'for' loops and conditional 'if' statements.
+    Course 2 Python Data Structures for working with different data structures
+    (strings, lists, and dictionaries).
+    Course 3 Using Python to Access Web Data to parse the data retreived
+    from FedStat website.
+    Course 4 Using Databases with Python for declaring the function
+    (week 1 material about OOP).
+    """
     # decode .sdmx data parse document tree
     print('Reading data...')
     data = response.read().decode("utf-8")
@@ -304,6 +381,31 @@ def parse_sdmx(response, id, force_upd=False, nowrite=False):
 
 def write_db(id, order, colnames, fields_id, fields_title, fields_values,
              fields_codes, df):
+    """Writes parsed data into the database. Each FedStat indicator has
+    its own table Data + indicator id. Names of filters are written into
+    their own table.
+
+    Parameters:
+    id (str): id of a FedStat indicator.
+    order (list): A list of column names in proper order.
+    colnames (list): A list with future column names.
+    order columns plus time and value columns
+    fields_id (list): A list with filter ids.
+    fields_title (list): A list with filter titles.
+    fields_values (list): A list with filter value names.
+    fields_codes (list): A list with filter value ids.
+    df (list): A list whose elements are also lists.
+    Stores data that will be written into the database
+
+    Results in data being written into the database.
+
+    Knowledge from Coursera courses:
+    Course 1 Programming for Everybody for declaring a function,
+    using 'for' loops and conditional 'if' statements.
+    Course 2 Python Data Structures for working with different data structures
+    (strings, lists, and tuples).
+    Course 4 Using Databases with Python for creating and working with database tables.
+    """
     # begin with table creation
     script = 'CREATE TABLE IF NOT EXISTS Data' + str(id) \
         + ' (id INTEGER PRIMARY KEY AUTOINCREMENT UNIQUE, Time INTEGER, \
@@ -403,6 +505,25 @@ def write_db(id, order, colnames, fields_id, fields_title, fields_values,
 
 
 def query_splitter(filters, id, nowrite=False):
+    """Splits a query into multiple queries if the original one is too big.
+
+    Parameters:
+    filters (pandas.core.frame.DataFrame): A dataframe with FedStat filters.
+    id (str): id of a FedStat indicator.
+    nowrite (bool): If False, the data is written into the database.
+
+    Returns:
+    parsed (pandas.core.frame.DataFrame): A dataframe with parsed data from FedStat.
+    Directly returns this dataframe when nowrite=True.
+
+    Knowledge from Coursera courses:
+    Course 1 Programming for Everybody for declaring a function,
+    using 'for' loops and conditional 'if' statements.
+    Course 2 Python Data Structures for working with different data structures
+    (strings and lists).
+    Course 3 Using Python to Access Web Data for parts where data gets retreived
+    from FedStat website.
+    """
     chunk_size = 1000000
     overall_df = pd.DataFrame()
     if query_size(filters) > chunk_size:
@@ -464,6 +585,24 @@ def query_splitter(filters, id, nowrite=False):
 
 
 def load_data(id):
+    """Loads data from the database. This function is called when there is
+    no new data on FedStat server for that indicator that is not already in
+    the database.
+
+    Parameters:
+    id (str): id of a FedStat indicator.
+
+    Returns:
+    [result, titles] (list): A list whose elements are a dataframe result
+    containing data for that indicator and a list of filters' titles.
+
+    Knowledge from Coursera courses:
+    Course 1 Programming for Everybody for declaring a function,
+    using 'for' loops and conditional 'if' statements.
+    Course 2 Python Data Structures for working with different data structures
+    (strings and lists).
+    Course 4 Using Databases with Python for retreiving data from the database.
+    """
     cur.execute('SELECT columns FROM Metadata WHERE dataset=?', (id, ))
     item = cur.fetchone()
     for row in item:
@@ -472,7 +611,8 @@ def load_data(id):
     beg = 'SELECT '
     mid = 'FROM Data' + str(id)
     end = ' ON '
-    # for some filter fields it can be more convenient for the user to have codes instead of text values
+    # for some filter fields it can be more convenient for the user
+    # to have codes instead of text values
     # so we add these fields to the output
     add = ['s_OKPD2', 's_OKPD', 's_OKATO']
     for col in colnames:
@@ -515,6 +655,24 @@ def load_data(id):
 
 
 def get_data(id, force_upd=False):
+    """Loads data needed to make reports.
+
+    Parameters:
+    id (str): id of a FedStat indicator.
+    force_upd (bool): If True, data in the database gets updated.
+
+    Results in either the data being written into the database by calling
+    query_splitter() that in turn calls parse_sdmx() that calls write_db(),
+    when there is no data on the selected indicator in the database,
+    or the data being uploaded from the database.
+
+    Knowledge from Coursera courses:
+    Course 1 Programming for Everybody for declaring a function,
+    using 'for' loops and conditional 'if' statements.
+    Course 2 Python Data Structures for working with different data structures
+    (strings, lists and dictionaries).
+    Course 4 Using Databases with Python for retreiving data from the database.
+    """
     filters = get_structure(id, force_upd=force_upd)
     if filters.empty:
         print('Error in getting the internal Fedstat filter structure. \
@@ -536,7 +694,11 @@ def get_data(id, force_upd=False):
             last_upd = eval(item)
         # check which dates are present on server and are not downloaded
         missing = [x for x in upd if x not in last_upd]
-        if len(missing) != 0:
+        if len(missing) == 0:
+            print('There are currently no new values to append. \
+            Use load_data() to get data')
+            # return load_data(id)
+        else:
             # get period ids dictionary to map value to ids
             period_ids = dict(filters.loc[filters["filter_id"] == '33560',
                                                  ["value_id",
@@ -568,6 +730,22 @@ def get_data(id, force_upd=False):
 
 
 def get_periods(id):
+    """Fetches from FedStat server what periods are available for an indicator.
+    The function is needed to compare dates that are on the server
+    and those that are already in the database.
+
+    Parameters:
+    id (str): id of a FedStat indicator.
+
+    Returns:
+    set(periods): a set of elements from the list of periods.
+    A set is used so that there are no duplicates in values.
+
+    Knowledge from Coursera courses:
+    Course 1 Programming for Everybody for declaring a function,
+    using a 'for' loop.
+    Course 2 Python Data Structures for working with a list.
+    """
     filters = get_structure(id)
     filters_short = pd.concat(
         [filters.loc[(filters["filter_id"] != "3") & (filters["filter_id"] != "33560") & (filters["filter_id"] != "57956")].groupby('filter_id').first().reset_index(),
@@ -676,6 +854,20 @@ def monetary_value():
 
 
 
+def user_interface():
+    """Asks the user to enter id of a FedStat indicator to make reports on.
+    Then proceeds to fetch the data from FedStat and writes it into the database.
+    If there is no data on FedStat website that is not already in the database,
+    data gets loaded from the database right away.
+    If the user presses Enter, asks for a new indicator id.
+
+    If the user presses Ctrl+C, stops.
+
+    Knowledge from Coursera courses:
+    Course 1 Programming for Everybody for declaring a function,
+    using 'for' loops and conditional 'if' statements.
+    Course 2 Python Data Structures for working with strings.
+    """
 
 def monthly_introduction():
     get_data('34118')
@@ -704,10 +896,9 @@ def monthly_introduction():
     print(area_pivot)
 
 
-def monthly_prices():
+# def monthly_prices():
 
 
-def user_interface():
     print('Press Ctrl+C to exit')
     a = ''
     while a == '':
@@ -721,7 +912,7 @@ def user_interface():
             elif rep == 2:
                 monthly_introduction()
             elif rep == 3:
-                monthly_prices()
+# monthly_prices()
 
 
             # if rep == 1:
@@ -736,11 +927,16 @@ def user_interface():
             # id = str(input())
             # get_data(id)
             # print('Data downloaded into data.sqlite')
+
+            print('Which data do you want to work with?')
+            print('34118 - housing data, 58971 - food, \
+            31452 - more housing data')
+            id = str(input())
+            parsed = get_data(id)
+            print('Data downloaded into data.sqlite')
             print('Press Ctrl+C to exit. Press Enter to load new data')
             a = str(input())
-
         except KeyboardInterrupt:
             exit()
-
 
 user_interface()
