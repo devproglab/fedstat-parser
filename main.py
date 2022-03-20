@@ -933,14 +933,14 @@ def user_interface():
     Depending on a number entered by the user calls a corresponding function.
     After the report is made, if the user presses Enter, asks to enter a number
     corresponding to another report.
-    If the user presses Ctrl+C, stops.
+    If the user writes any other character, it stops.
 
     Knowledge from Coursera courses:
     Course 1 Programming for Everybody for declaring a function and
     using 'conditional 'if' statements.
     Course 2 Python Data Structures for working with strings.
     """
-    print('Press Ctrl+C to exit')
+    print('Write anything and hit enter (or press Ctrl + C) to exit')
     a = ''
     while a == '':
         try:
@@ -955,7 +955,7 @@ def user_interface():
                 monthly_introduction()
             elif rep == 3:
                 quarterly_prices()
-            print('Press Ctrl+C to exit. Press Enter to make a new report')
+            print('Write anything and hit enter (or press Ctrl + C) to exit. Press Enter to make a new report')
             a = str(input())
         except KeyboardInterrupt:
             exit()
