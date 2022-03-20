@@ -1,7 +1,7 @@
 """The program is meant to facilitate the uploading of data from fedstat.ru
 in order to create reports on indicators chosen by the user.
 
-Pylint rated the code 7.91/10
+Pylint rated the code 8.08/10
 """
 from sys import exit
 
@@ -694,7 +694,11 @@ def get_data(id, force_upd=False):
             last_upd = eval(item)
         # check which dates are present on server and are not downloaded
         missing = [x for x in upd if x not in last_upd]
-        if len(missing) != 0:
+        if len(missing) == 0:
+            print('There are currently no new values to append. \
+            Use load_data() to get data')
+            # return load_data(id)
+        else:
             # get period ids dictionary to map value to ids
             period_ids = dict(filters.loc[filters["filter_id"] == '33560',
                                           ["value_id",
@@ -755,6 +759,14 @@ def get_periods(id):
 
 
 def monetary_value():
+    """Creates a report on monetary value of new flats in different discticts
+    and different time periods and writes it into a .csv file.
+
+    Knowledge from Coursera courses:
+    Course 1 Programming for Everybody for declaring a function,
+    using a 'for' loop, a 'while' loop and 'if' statements.
+    Course 2 Python Data Structures for working with a dictionary.
+    """
     # 34118 - area introduced
     get_data('34118')
     [area, area_col] = load_data('34118')
@@ -763,14 +775,14 @@ def monetary_value():
     # 31452 - average price
     get_data('31452')
     [price, price_col] = load_data('31452')
-    s_vidryn     = ['Первичный рынок жилья',]
-    s_OKATO      = ['Центральный федеральный округ', 'Северо-Западный федеральный округ',
-                    'Южный федеральный округ (с 29.07.2016)', 'Северо-Кавказский федеральный округ',
-                    'Приволжский федеральный округ', 'Уральский федеральный округ',
-                    'Сибирский федеральный округ', 'Дальневосточный федеральный округ']
+    s_vidryn = ['Первичный рынок жилья',]
+    s_OKATO = ['Центральный федеральный округ', 'Северо-Западный федеральный округ',
+               'Южный федеральный округ (с 29.07.2016)', 'Северо-Кавказский федеральный округ',
+               'Приволжский федеральный округ', 'Уральский федеральный округ',
+               'Сибирский федеральный округ', 'Дальневосточный федеральный округ']
     S_TIPKVARTIR = ['Все типы квартир',]
-    PERIOD       = ['I квартал', 'II квартал', 'III квартал', 'IV квартал']
-    years        = [2019, 2020, 2021]
+    PERIOD = ['I квартал', 'II квартал', 'III квартал', 'IV квартал']
+    years = [2019, 2020, 2021]
     # filtering of Prices
     price = price[price['s_vidryn'].isin(s_vidryn)]
     price = price[price['TIME'].isin(years)]
@@ -783,8 +795,9 @@ def monetary_value():
     area = area[area['s_mosh'].isin(s_mosh)]
 
     # Calculate values for the 1st quarter of 2019
-    quarter_index = pd.MultiIndex.from_arrays([s_OKATO + s_OKATO, [2019, 2019, 2019, 2019, 2019, 2019, 2019, 2019,
-                                                                   2020, 2020, 2020, 2020, 2020, 2020, 2020, 2020],
+    quarter_index = pd.MultiIndex.from_arrays([s_OKATO + s_OKATO,
+                                               [2019, 2019, 2019, 2019, 2019, 2019, 2019, 2019,
+                                                2020, 2020, 2020, 2020, 2020, 2020, 2020, 2020],
                                                ['I квартал', 'I квартал', 'I квартал', 'I квартал',
                                                 'I квартал', 'I квартал', 'I квартал', 'I квартал',
                                                 'I квартал', 'I квартал', 'I квартал', 'I квартал',
@@ -799,7 +812,8 @@ def monetary_value():
     area = pd.concat([area, first_quarter])
     area = area.loc[(s_OKATO, years, PERIOD)]
     area = area.reset_index()
-    price_area = price.merge(area, left_on=['s_OKATO', 'TIME', 'PERIOD'], right_on=['s_OKATO', 'TIME', 'PERIOD'])
+    price_area = price.merge(area, left_on=['s_OKATO', 'TIME', 'PERIOD'],
+                             right_on=['s_OKATO', 'TIME', 'PERIOD'])
 
     # Calculate monetary value
     monetary = pd.Series([], dtype='float64')
@@ -814,10 +828,12 @@ def monetary_value():
     price_area['EI_y'] = price_area['EI_y'].fillna(value='тысяча квадратных метров общей площади')
 
     # associate technical column names with human-readable column names
-    col_names = ['TIME', 'PERIOD', 's_OKATO', 's_OKATO_id_x', 's_vidryn', 's_mosh', 'EI_x', 'EI_y', 'VALUE_x',
-                 'VALUE_y', 'S_TIPKVARTIR']
-    nice_names = ['Year', 'Period', 'Federal District', 'Federal District (id)', 'Type of Market', 'Type of Building',
-                  'Unit of Price', 'Unit of Area', 'Average Price', 'Area Introduced', 'Type of Flats']
+    col_names = ['TIME', 'PERIOD', 's_OKATO', 's_OKATO_id_x', 's_vidryn',
+                 's_mosh', 'EI_x', 'EI_y', 'VALUE_x', 'VALUE_y', 'S_TIPKVARTIR']
+    nice_names = ['Year', 'Period', 'Federal District', 'Federal District (id)',
+                  'Type of Market', 'Type of Building', 'Unit of Price',
+                  'Unit of Area', 'Average Price', 'Area Introduced',
+                  'Type of Flats']
     name_dict = dict(zip(col_names, nice_names))
 
     # Replace technical names with human-readable
@@ -827,14 +843,15 @@ def monetary_value():
 
     # Create pivot-tables
     price_area_pivot = price_area.pivot(index='Federal District', columns=['Year', 'Period'],
-                                  values="Monetary Value in RUB, millions")
+                                        values="Monetary Value in RUB, millions")
     price_pivot = price.pivot(index='Federal District', columns=['Year', 'Period'], values='VALUE')
     area_pivot = area.pivot(index='Federal District', columns=['Year', 'Period'], values='VALUE')
 
     price_area_pivot.to_csv('Monetary Value Report.csv', encoding='utf-8')
     print('\n', price_area_pivot, '\n')
 
-    inp_d = {'both': [price_pivot, area_pivot], 'pr': [price_pivot, ], 'ar': [area_pivot, ], 'no': []}
+    inp_d = {'both': [price_pivot, area_pivot], 'pr': [price_pivot, ],
+             'ar': [area_pivot, ], 'no': []}
     while True:
         inp = input('Would you like to add separate tables for price and area? pr/ar/both/no ')
         if inp in inp_d.keys():
@@ -849,6 +866,11 @@ def monetary_value():
 
 
 def monthly_introduction():
+    """Creates a report on monthly housing construction and writes it into a .csv file.
+
+    Knowledge from Coursera courses:
+    Course 1 Programming for Everybody for declaring a function.
+    """
     get_data('34118')
     [area, titles_area] = load_data('34118')
     PERIOD = ['январь', 'февраль', 'март', 'апрель', 'май', 'июнь',
@@ -861,8 +883,8 @@ def monthly_introduction():
 
     # associate technical names with human-readable
     col_names = ['TIME', 'PERIOD', 's_OKATO', 's_OKATO_id', 's_mosh', 'EI', 'VALUE']
-    nice_names = ['Year', 'Period', 'Federal District', 'Federal District (id)', 'Type of Building',
-                  'Unit of Area', 'Area Introduced']
+    nice_names = ['Year', 'Period', 'Federal District', 'Federal District (id)',
+                  'Type of Building', 'Unit of Area', 'Area Introduced']
     name_dict = dict(zip(col_names, nice_names))
 
     # Replace technical names with human-readable
@@ -876,6 +898,12 @@ def monthly_introduction():
 
 
 def quarterly_prices():
+    """Creates a report on average monthly prices of flats in different regions.
+
+    Knowledge from Coursera courses:
+    Course 1 Programming for Everybody for declaring a function.
+    Course 2 Course 2 Python Data Structures for working with a dictionary.
+    """
     get_data('31452')
     [prices, titles] = load_data('31452')
     S_TIPKVARTIR = ['Все типы квартир', ]
@@ -906,17 +934,15 @@ def quarterly_prices():
 
 
 def user_interface():
-    """Asks the user to enter id of a FedStat indicator to make reports on.
-    Then proceeds to fetch the data from FedStat and writes it into the database.
-    If there is no data on FedStat website that is not already in the database,
-    data gets loaded from the database right away.
-    If the user presses Enter, asks for a new indicator id.
-
+    """Asks the user what kind of report he wants to get.
+    Depending on a number entered by the user calls a corresponding function.
+    After the report is made, if the user presses Enter, asks to enter a number
+    corresponding to another report.
     If the user presses Ctrl+C, stops.
 
     Knowledge from Coursera courses:
-    Course 1 Programming for Everybody for declaring a function,
-    using 'for' loops and conditional 'if' statements.
+    Course 1 Programming for Everybody for declaring a function and
+    using 'conditional 'if' statements.
     Course 2 Python Data Structures for working with strings.
     """
     print('Press Ctrl+C to exit')
