@@ -899,7 +899,6 @@ def quarterly_prices():
 
     Knowledge from Coursera courses:
     Course 1 Programming for Everybody for declaring a function.
-    Course 2 Course 2 Python Data Structures for working with a dictionary.
     Course 2 Course 2 Python Data Structures for working with lists and dictionaries.
     """
     get_data('31452')
