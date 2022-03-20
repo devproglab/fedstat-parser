@@ -758,12 +758,107 @@ def get_periods(id):
     return set(periods)
 
 
+def monetary_value():
+    # 34118 - area introduced
+    get_data('34118')
+    [area, area_col] = load_data('34118')
+    s_mosh = ['Жилые здания многоквартирные',]
+
+    # 31452 - average price
+    get_data('31452')
+    [price, price_col] = load_data('31452')
+    s_vidryn     = ['Первичный рынок жилья',]
+    s_OKATO      = ['Центральный федеральный округ', 'Северо-Западный федеральный округ',
+                    'Южный федеральный округ (с 29.07.2016)', 'Северо-Кавказский федеральный округ',
+                    'Приволжский федеральный округ', 'Уральский федеральный округ',
+                    'Сибирский федеральный округ', 'Дальневосточный федеральный округ']
+    S_TIPKVARTIR = ['Все типы квартир',]
+    PERIOD       = ['I квартал', 'II квартал', 'III квартал', 'IV квартал']
+    years        = [2019, 2020, 2021]
+    # filtering of Prices
+    price = price[price['s_vidryn'].isin(s_vidryn)]
+    price = price[price['TIME'].isin(years)]
+    price = price[price['PERIOD'].isin(PERIOD)]
+    price = price[price['S_TIPKVARTIR'].isin(S_TIPKVARTIR)]
+    price = price[price['s_OKATO'].isin(s_OKATO)]
+
+    # Filtering of Areas
+    area = area.set_index(['s_OKATO', 'TIME', 'PERIOD'])
+    area = area[area['s_mosh'].isin(s_mosh)]
+
+    # Calculate values for the 1st quarter of 2019
+    quarter_index = pd.MultiIndex.from_arrays([s_OKATO + s_OKATO, [2019, 2019, 2019, 2019, 2019, 2019, 2019, 2019,
+                                                                   2020, 2020, 2020, 2020, 2020, 2020, 2020, 2020],
+                                               ['I квартал', 'I квартал', 'I квартал', 'I квартал',
+                                                'I квартал', 'I квартал', 'I квартал', 'I квартал',
+                                                'I квартал', 'I квартал', 'I квартал', 'I квартал',
+                                                'I квартал', 'I квартал', 'I квартал', 'I квартал']])
+    first_quarter = pd.DataFrame(index=quarter_index, columns=['VALUE', ])
+    first_quarter = first_quarter.sort_index()
+    for district in s_OKATO:
+        for year in [2019, 2020]:
+            temp_quarter = area.loc[(district, year, ['январь', 'февраль', 'март']), 'VALUE']
+            first_quarter.loc[(district, year, 'I квартал'), 'VALUE'] = temp_quarter.sum()
+
+    area = pd.concat([area, first_quarter])
+    area = area.loc[(s_OKATO, years, PERIOD)]
+    area = area.reset_index()
+    price_area = price.merge(area, left_on=['s_OKATO', 'TIME', 'PERIOD'], right_on=['s_OKATO', 'TIME', 'PERIOD'])
+
+    # Calculate monetary value
+    monetary = pd.Series([], dtype='float64')
+    for i in range(len(price_area)):
+        monetary[i] = price_area['VALUE_x'][i] * price_area['VALUE_y'][i] / 1000
+    monetary = monetary.round(2)
+    price_area.insert(5, "Monetary Value in RUB, millions", monetary)
+
+    # clean up the data
+    price_area = price_area.drop(columns='s_OKATO_id_y')
+    price_area['s_mosh'] = price_area['s_mosh'].fillna(value='Жилые здания многоквартирные')
+    price_area['EI_y'] = price_area['EI_y'].fillna(value='тысяча квадратных метров общей площади')
+
+    # associate technical column names with human-readable column names
+    col_names = ['TIME', 'PERIOD', 's_OKATO', 's_OKATO_id_x', 's_vidryn', 's_mosh', 'EI_x', 'EI_y', 'VALUE_x',
+                 'VALUE_y',
+                 'S_TIPKVARTIR']
+    nice_names = ['Year', 'Period', 'Federal District', 'Federal District (id)', 'Type of Market', 'Type of Building',
+                  'Unit of Price', 'Unit of Area', 'Average Price', 'Area Introduced', 'Type of Flats']
+    name_dict = dict(zip(col_names, nice_names))
+
+    # Replace technical names with human-readable
+    price_area = price_area.rename(columns=name_dict)
+    area = area.rename(columns=name_dict)
+    price = price.rename(columns=name_dict)
+
+    # Create pivot-tables
+    price_area_pivot = price_area.pivot(index='Federal District', columns=['Year', 'Period'],
+                                  values="Monetary Value in RUB, millions")
+    price_pivot = price.pivot(index='Federal District', columns=['Year', 'Period'], values='VALUE')
+    area_pivot = area.pivot(index='Federal District', columns=['Year', 'Period'], values='VALUE')
+
+    price_area_pivot.to_csv('Monetary Value Report.csv', encoding='utf-8')
+    print('\n', price_area_pivot, '\n')
+
+    inp_d = {'both': [price_pivot, area_pivot], 'pr': [price_pivot, ], 'ar': [area_pivot, ], 'no': []}
+    while True:
+        inp = input('Would you like to add separate tables for price and area? pr/ar/both/no ')
+        if inp in inp_d.keys():
+            break
+        else:
+            print('Please enter the correct option')
+    price_pivot.name = 'price'
+    area_pivot.name = 'area'
+    for i in inp_d[inp]:
+        i.to_csv(i.name + '.csv', encoding='utf-8')
+        print('\n', i, '\n')
+
+
+
 def user_interface():
     """Asks the user to enter id of a FedStat indicator to make reports on.
     Then proceeds to fetch the data from FedStat and writes it into the database.
     If there is no data on FedStat website that is not already in the database,
     data gets loaded from the database right away.
-
     If the user presses Enter, asks for a new indicator id.
 
     If the user presses Ctrl+C, stops.
@@ -773,10 +868,66 @@ def user_interface():
     using 'for' loops and conditional 'if' statements.
     Course 2 Python Data Structures for working with strings.
     """
+
+def monthly_introduction():
+    get_data('34118')
+    [area, titles_area] = load_data('34118')
+    PERIOD = ['январь', 'февраль', 'март', 'апрель', 'май', 'июнь',
+              'июль', 'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь']
+    area = area[area['PERIOD'].isin(PERIOD)]
+
+    # categorize months for the sort
+    area['PERIOD'] = pd.Categorical(area['PERIOD'], categories=PERIOD, ordered=True)
+    area.sort_values(['s_OKATO', 'TIME', 'PERIOD'])
+
+    # associate technical names with human-readable
+    col_names = ['TIME', 'PERIOD', 's_OKATO', 's_OKATO_id_x', 's_mosh', 'EI', 'VALUE']
+    nice_names = ['Year', 'Period', 'Federal District', 'Federal District (id)', 'Type of Building',
+                  'Unit of Area', 'Area Introduced']
+    name_dict = dict(zip(col_names, nice_names))
+
+    # Replace technical names with human-readable
+    area = area.rename(columns=name_dict)
+
+    area_pivot = area.pivot(index=['Federal District', 'Type of Building'],
+                            columns=['Year', 'Period'], values='Area Introduced')
+    area_pivot.to_csv('Area Introduced Monthly.csv', encoding='utf-8')
+
+    print(area_pivot)
+
+
+# def monthly_prices():
+
+
     print('Press Ctrl+C to exit')
     a = ''
     while a == '':
         try:
+            print('''Which report would you like to get?  
+            1. Monetary Value of New Flats  
+            2. Monthly Introduction of New Living Space''')
+            rep = int(input('Enter the number of report: '))
+            if rep == 1:
+                monetary_value()
+            elif rep == 2:
+                monthly_introduction()
+            elif rep == 3:
+# monthly_prices()
+
+
+            # if rep == 1:
+            #     print('Do you want to show by region[1] or Federal District[2]?')
+            #     reg = int(input('Enter type 1 or 2: '))
+            #     monetary_value(reg)
+            # elif rep == 2:
+            #     exit()
+            # print('Which data do you want to work with?')
+            # print('34118 - housing data, \
+            # 31452 - more housing data')
+            # id = str(input())
+            # get_data(id)
+            # print('Data downloaded into data.sqlite')
+
             print('Which data do you want to work with?')
             print('34118 - housing data, 58971 - food, \
             31452 - more housing data')
