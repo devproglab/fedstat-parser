@@ -1,3 +1,8 @@
+"""The program is meant to facilitate the uploading of data from fedstat.ru
+in order to create reports on indicators chosen by the user.
+
+Pylint rated the code 7.62/10
+"""
 from sys import exit
 
 try:
@@ -18,7 +23,7 @@ try:
     import sqlite3
 except:
     print(
-      'Error: some of the required packages are missing. Please install them.')
+        'Error: some of the required packages are missing. Please install them.')
     exit()
 try:
     conn = sqlite3.connect('data.sqlite')
@@ -232,7 +237,7 @@ def make_query(filterdata):
     meta = filterdata.loc[filterdata["filter_id"] == '0'].values[0]
     query = [('id', meta[2]),
              ('title', meta[3])] + filterdata.drop_duplicates(
-        subset=["filter_id"]).loc[:, ['filter_type', 'filter_id']].to_records(index=None).tolist() \
+             subset=["filter_id"]).loc[:, ['filter_type', 'filter_id']].to_records(index=None).tolist() \
         + list(zip([['selectedFilterIds'] * len(p)][0], p))
     # format query to json-styled request accepted by the server
     query_json = {}
