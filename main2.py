@@ -222,7 +222,7 @@ def make_query(filterdata):
     return query_json
 
 
-def parse_sdmx(response, id, force_upd=False, nowrite=False):
+def parse_sdmx(response, id, nowrite=False):
     """Goes through a datafile received from FedStat and arranges the data
     in an appropriate manner to be written into the database.
     If nowrite=False the data is written into the database,
@@ -232,7 +232,6 @@ def parse_sdmx(response, id, force_upd=False, nowrite=False):
     response (urlib.response): An object with data uploaded
     from FedStat website by sending a request to the server.
     id (str): id of a FedStat indicator.
-    force_upd (bool): If True, data in the database gets updated.
     nowrite (bool): If False, the parsed data is written into the database.
 
     Returns:
