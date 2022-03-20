@@ -632,7 +632,7 @@ def monetary_value():
     for i in range(len(price_area)):
         monetary[i] = price_area['VALUE_x'][i] * price_area['VALUE_y'][i] / 1000
     monetary = monetary.round(2)
-    price_area.insert(5, "Monetary Value in millions ₽", monetary)
+    price_area.insert(5, "Monetary Value in RUB, millions", monetary)
 
     # clean up the data
     price_area = price_area.drop(columns='s_OKATO_id_y')
@@ -652,28 +652,29 @@ def monetary_value():
     area = area.rename(columns=name_dict)
     price = price.rename(columns=name_dict)
 
-    price_area.to_csv('Monetary Value Report.csv', encoding='utf-8')
-
     # Create pivot-tables
-    price_area = price_area.pivot(index='Federal District', columns=['Year', 'Period'],
-                                  values="Monetary Value in millions ₽")
+    price_area_pivot = price_area.pivot(index='Federal District', columns=['Year', 'Period'],
+                                  values="Monetary Value in RUB, millions")
     price_pivot = price.pivot(index='Federal District', columns=['Year', 'Period'], values='VALUE')
     area_pivot = area.pivot(index='Federal District', columns=['Year', 'Period'], values='VALUE')
 
-    inp_d = {'both': [price, area], 'pr': [price, ], 'ar': [area, ], 'no': []}
+    price_area_pivot.to_csv('Monetary Value Report.csv', encoding='utf-8')
+    print('\n', price_area_pivot, '\n')
+
+    inp_d = {'both': [price_pivot, area_pivot], 'pr': [price_pivot, ], 'ar': [area_pivot, ], 'no': []}
     while True:
         inp = input('Would you like to add separate tables for price and area? pr/ar/both/no ')
         if inp in inp_d.keys():
             break
         else:
             print('Please enter the correct option')
-    price.name = 'price'
-    area.name = 'area'
+    price_pivot.name = 'price'
+    area_pivot.name = 'area'
     for i in inp_d[inp]:
-        i.to_csv(i.name + '.csv', encoding = 'utf-8')
-        print('\n', i.head(), '\n')
+        i.to_csv(i.name + '.csv', encoding='utf-8')
+        print('\n', i, '\n')
 
-    print('\n', price_area, '\n')
+
 
 
 def monthly_introduction():
