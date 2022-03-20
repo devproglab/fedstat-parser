@@ -579,6 +579,7 @@ def get_periods(id):
         periods.append(r)
     return set(periods)
 
+
 def monetary_value():
     # 34118 - area introduced
     get_data('34118')
@@ -588,14 +589,14 @@ def monetary_value():
     # 31452 - average price
     get_data('31452')
     [price, price_col] = load_data('31452')
-    s_vidryn = ['Первичный рынок жилья',]
-    s_OKATO = ['Центральный федеральный округ', 'Северо-Западный федеральный округ',
-               'Южный федеральный округ (с 29.07.2016)', 'Северо-Кавказский федеральный округ',
-               'Приволжский федеральный округ', 'Уральский федеральный округ',
-               'Сибирский федеральный округ', 'Дальневосточный федеральный округ']
+    s_vidryn     = ['Первичный рынок жилья',]
+    s_OKATO      = ['Центральный федеральный округ', 'Северо-Западный федеральный округ',
+                    'Южный федеральный округ (с 29.07.2016)', 'Северо-Кавказский федеральный округ',
+                    'Приволжский федеральный округ', 'Уральский федеральный округ',
+                    'Сибирский федеральный округ', 'Дальневосточный федеральный округ']
     S_TIPKVARTIR = ['Все типы квартир',]
-    PERIOD = ['I квартал', 'II квартал', 'III квартал', 'IV квартал']
-    years = [2019, 2020, 2021]
+    PERIOD       = ['I квартал', 'II квартал', 'III квартал', 'IV квартал']
+    years        = [2019, 2020, 2021]
     # filtering of Prices
     price = price[price['s_vidryn'].isin(s_vidryn)]
     price = price[price['TIME'].isin(years)]
@@ -651,7 +652,7 @@ def monetary_value():
     area = area.rename(columns=name_dict)
     price = price.rename(columns=name_dict)
 
-    price_area.to_csv('Monetary Value Report.csv')
+    price_area.to_csv('Monetary Value Report.csv', encoding='utf-8')
 
     # Create pivot-tables
     price_area = price_area.pivot(index='Federal District', columns=['Year', 'Period'],
@@ -669,21 +670,48 @@ def monetary_value():
     price.name = 'price'
     area.name = 'area'
     for i in inp_d[inp]:
-        i.to_csv(i.name + '.csv')
+        i.to_csv(i.name + '.csv', encoding = 'utf-8')
         print('\n', i.head(), '\n')
 
     print('\n', price_area, '\n')
 
+
+def monthly_introduction():
+    get_data('34118')
+    [area, titles_area] = load_data('34118')
+    PERIOD = ['январь', 'февраль', 'март', 'апрель', 'май', 'июнь',
+              'июль', 'август', 'сентябрь' 'октябрь', 'ноябрь', 'декабрь']
+    area = area[area['PERIOD'].isin(PERIOD)]
+    area.PERIOD = area.PERIOD.astype('category')
+    area.PERIOD.cat.set_categories(PERIOD)
+    area.sort_values(['s_OKATO', 'TIME', 'PERIOD'])
+    # associate technical names with human-readable
+    col_names = ['TIME', 'PERIOD', 's_OKATO', 's_OKATO_id_x', 's_mosh', 'EI', 'VALUE']
+    nice_names = ['Year', 'Period', 'Federal District', 'Federal District (id)', 'Type of Building',
+                  'Unit of Area', 'Area Introduced']
+    name_dict = dict(zip(col_names, nice_names))
+
+    # Replace technical names with human-readable
+    area = area.rename(columns=name_dict)
+
+    area_pivot = area.pivot(index=['Federal District', 'Type of Building'], columns=['Year', 'Period'], values='Area Introduced')
+    area_pivot.to_csv('Area Introduced Monthly.csv', encoding='utf-8')
+
+    print(area_pivot)
 
 def user_interface():
     print('Press Ctrl+C to exit')
     a = ''
     while a == '':
         try:
-            print('''Which report would you like to get? \n 1. Monetary Value of New Flats ''')
+            print('''Which report would you like to get?  
+            1. Monetary Value of New Flats  
+            2. Monthly Introduction of New Living Space''')
             rep = int(input('Enter the number of report: '))
             if rep == 1:
                 monetary_value()
+            elif rep == 2:
+                monthly_introduction()
 
 
             # if rep == 1:
