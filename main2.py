@@ -1,7 +1,7 @@
 """The program is meant to facilitate the uploading of data from fedstat.ru
 in order to create reports on indicators chosen by the user.
 
-Pylint rated the code 7.62/10
+Pylint rated the code 7.91/10
 """
 from sys import exit
 
@@ -170,7 +170,7 @@ def get_structure(id, force_upd=False):
             filters = pd.merge(filters, layout, how='left')
             # REMOVE LATER: WRITE STRUCTURE TO FILE
             filters['filter_id'] = filters.filter_id.astype(str)
-            for index, row in filters.iterrows():
+            for _, row in filters.iterrows():
                 cur_str.execute('''INSERT OR IGNORE INTO Filters
                 (filter_id, filter_title) VALUES (?, ?)''',
                                 (str(row['filter_id']), row['filter_title']))
@@ -189,9 +189,9 @@ def get_structure(id, force_upd=False):
                 (filter_id, value_id, filter_type, database)
                 VALUES (?, ?, ?, ?)''',
                                 (str(row['filter_id']),
-                                    row['value_id'],
-                                    filter_type,
-                                    id))
+                                 row['value_id'],
+                                 filter_type,
+                                 id))
             conn_str.commit()
             print('Data structure retrieved.')
     return filters
@@ -237,7 +237,7 @@ def make_query(filterdata):
     meta = filterdata.loc[filterdata["filter_id"] == '0'].values[0]
     query = [('id', meta[2]),
              ('title', meta[3])] + filterdata.drop_duplicates(
-             subset=["filter_id"]).loc[:, ['filter_type', 'filter_id']].to_records(index=None).tolist() \
+                 subset=["filter_id"]).loc[:, ['filter_type', 'filter_id']].to_records(index=None).tolist() \
         + list(zip([['selectedFilterIds'] * len(p)][0], p))
     # format query to json-styled request accepted by the server
     query_json = {}
@@ -303,18 +303,18 @@ def parse_sdmx(response, id, nowrite=False):
         fields_title.append(node.text)
     # get internal filter value ids
     fields_codes = list()
-    for i in range(0, len(fields_id)):
+    for _, fields_id_item in enumerate(fields_id):
         loc = 'CodeLists/structure:CodeList/[@id="' \
-            + fields_id[i] + '"]/structure:Code'
+            + fields_id_item + '"]/structure:Code'
         temp = list()
         for node in tree.findall(loc, ns):
             temp.append(node.attrib["value"])
         fields_codes.append(temp)
     # get filter value names
     fields_values = list()
-    for i in range(0, len(fields_id)):
+    for _, fields_id_item in enumerate(fields_id):
         loc = 'CodeLists/structure:CodeList/[@id="' \
-            + fields_id[i] + '"]/structure:Code/structure:Description'
+            + fields_id_item + '"]/structure:Code/structure:Description'
         temp = list()
         for node in tree.findall(loc, ns):
             temp.append(node.text)
@@ -479,8 +479,8 @@ def write_db(id, order, colnames, fields_id, fields_title, fields_values,
         script = script.rstrip(' , ')
         left = left.rstrip(',') + ')'
         script = script + left
-        RowToUpload = tuple(temp_ds)
-        cur.execute(script, RowToUpload)
+        row_to_upload = tuple(temp_ds)
+        cur.execute(script, row_to_upload)
     conn.commit()
     cols = ''
     for item in colnames:
@@ -697,21 +697,21 @@ def get_data(id, force_upd=False):
         if len(missing) != 0:
             # get period ids dictionary to map value to ids
             period_ids = dict(filters.loc[filters["filter_id"] == '33560',
-                                                 ["value_id",
-                                                  "value_title"]].values.tolist())
+                                          ["value_id",
+                                           "value_title"]].values.tolist())
             period_ids = dict((v, k) for k, v in period_ids.items())
             # get unique missing filter values
             missing = list(missing)
-            missing_years = list(set([i[0] for i in missing]))
-            missing_periods = list(set([i[1] for i in missing]))
+            missing_years = list({[i[0] for i in missing]})
+            missing_periods = list({[i[1] for i in missing]})
             templist = list()
-            for i in range(0, len(missing_years)):
-                templist.append(['3', 'Год', str(missing_years[i]),
-                                 str(missing_years[i]), 'columnObjectIds'])
-            for i in range(0, len(missing_periods)):
+            for _, missing_year in enumerate(missing_years):
+                templist.append(['3', 'Год', str(missing_year),
+                                 str(missing_year), 'columnObjectIds'])
+            for _, missing_period in enumerate(missing_periods):
                 templist.append(['33560', 'Период',
-                                 period_ids[missing_periods[i]],
-                                 missing_periods[i], 'columnObjectIds'])
+                                 period_ids[missing_period],
+                                 missing_period, 'columnObjectIds'])
             temp = pd.DataFrame(templist, columns=filters.columns)
             # change the filters to load missing dates
             filters_augm = pd.concat([filters.loc[(filters["filter_id"] != "3") & (filters["filter_id"] != "33560")], temp])
