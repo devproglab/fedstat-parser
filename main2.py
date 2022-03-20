@@ -927,7 +927,6 @@ def quarterly_prices():
     print(prices_pivot)
 
 
-
 def user_interface():
     """Asks the user what kind of report he wants to get.
     Depending on a number entered by the user calls a corresponding function.
