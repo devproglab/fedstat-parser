@@ -946,9 +946,9 @@ def user_interface():
     while a == '':
         try:
             print('''Which report would you like to get?  
-            1. Monetary Value of New Flats  
-            2. Monthly Introduction of New Living Space
-            3. Average Quarterly Prices of Square Meter''')
+            1. Monetary Value of New Flats  (by Quarter & Federal district)
+            2. Monthly housing construction (by Region, Housing Type and Month) 
+            3. Average Quarterly Prices of Square Meter (by Quarter and Region)''')
             rep = int(input('Enter the number of report: '))
             if rep == 1:
                 monetary_value()
