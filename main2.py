@@ -40,6 +40,16 @@ def get_structure(id, force_upd=False):
     Returns:
     filters (pandas.core.frame.DataFrame): A dataframe with filters
     used by FedStat for their data.
+
+    Knowledge from Coursera courses:
+    Course 1 Programming for Everybody for declaring a function,
+    using a 'for' loop and conditional 'if' statements.
+    Course 2 Python Data Structures for working with different data structures
+    (strings, lists, and dictionaries).
+    Course 3 Using Python to Access Web Data for retreiving data
+    from FedStat website and using regular expressions.
+    Course 4 Using Databases with Python for
+    creating a database with data structure.
     """
     cur_str.execute('''CREATE TABLE IF NOT EXISTS Structure
         (id INTEGER PRIMARY KEY, database INTEGER, filter_id INTEGER,
@@ -191,6 +201,9 @@ def query_size(filterdata):
 
     Returns:
     S (int): The query size, the number of filters.
+
+    Knowledge from Coursera courses:
+    Course 1 Programming for Everybody for declaring a function.
     """
     S = filterdata['filter_id'].value_counts().values.prod()
     return S
@@ -204,6 +217,12 @@ def make_query(filterdata):
 
     Returns:
     query_json (dict): A query in a form of a json-style request.
+
+    Knowledge from Coursera courses:
+    Course 1 Programming for Everybody for declaring a function
+    and using 'for' loops.
+    Course 2 Python Data Structures for working with different data structures
+    (strings, lists, and dictionaries).
     """
     # concatenate filter ids and filter value ids for the query
     p = [str(m) + "_" + str(n) for m, n in zip([val[0] for val in filterdata[["filter_id"]].values.tolist()],
@@ -235,7 +254,18 @@ def parse_sdmx(response, id, nowrite=False):
     nowrite (bool): If False, the parsed data is written into the database.
 
     Returns:
-    parsed (pandas.core.frame.DataFrame): A dataframe with parsed data from FedStat.
+    parsed (pandas.core.frame.DataFrame): A dataframe with parsed data
+    from FedStat.
+
+    Knowledge from Coursera courses:
+    Course 1 Programming for Everybody for declaring a function,
+    using 'for' loops and conditional 'if' statements.
+    Course 2 Python Data Structures for working with different data structures
+    (strings, lists, and dictionaries).
+    Course 3 Using Python to Access Web Data to parse the data retreived
+    from FedStat website.
+    Course 4 Using Databases with Python for declaring the function
+    (week 1 material about OOP).
     """
     # decode .sdmx data parse document tree
     print('Reading data...')
@@ -363,6 +393,13 @@ def write_db(id, order, colnames, fields_id, fields_title, fields_values,
     Stores data that will be written into the database
 
     Results in data being written into the database.
+
+    Knowledge from Coursera courses:
+    Course 1 Programming for Everybody for declaring a function,
+    using 'for' loops and conditional 'if' statements.
+    Course 2 Python Data Structures for working with different data structures
+    (strings, lists, and tuples).
+    Course 4 Using Databases with Python for creating and working with database tables.
     """
     # begin with table creation
     script = 'CREATE TABLE IF NOT EXISTS Data' + str(id) \
@@ -473,6 +510,14 @@ def query_splitter(filters, id, nowrite=False):
     Returns:
     parsed (pandas.core.frame.DataFrame): A dataframe with parsed data from FedStat.
     Directly returns this dataframe when nowrite=True.
+
+    Knowledge from Coursera courses:
+    Course 1 Programming for Everybody for declaring a function,
+    using 'for' loops and conditional 'if' statements.
+    Course 2 Python Data Structures for working with different data structures
+    (strings and lists).
+    Course 3 Using Python to Access Web Data for parts where data gets retreived
+    from FedStat website.
     """
     chunk_size = 1000000
     overall_df = pd.DataFrame()
@@ -545,6 +590,13 @@ def load_data(id):
     Returns:
     [result, titles] (list): A list whose elements are a dataframe result
     containing data for that indicator and a list of filters' titles.
+
+    Knowledge from Coursera courses:
+    Course 1 Programming for Everybody for declaring a function,
+    using 'for' loops and conditional 'if' statements.
+    Course 2 Python Data Structures for working with different data structures
+    (strings and lists).
+    Course 4 Using Databases with Python for retreiving data from the database.
     """
     cur.execute('SELECT columns FROM Metadata WHERE dataset=?', (id, ))
     item = cur.fetchone()
@@ -608,6 +660,13 @@ def get_data(id, force_upd=False):
     query_splitter() that in turn calls parse_sdmx() that calls write_db(),
     when there is no data on the selected indicator in the database,
     or the data being uploaded from the database.
+
+    Knowledge from Coursera courses:
+    Course 1 Programming for Everybody for declaring a function,
+    using 'for' loops and conditional 'if' statements.
+    Course 2 Python Data Structures for working with different data structures
+    (strings, lists and dictionaries).
+    Course 4 Using Databases with Python for retreiving data from the database.
     """
     filters = get_structure(id, force_upd=force_upd)
     if filters.empty:
@@ -676,6 +735,11 @@ def get_periods(id):
     Returns:
     set(periods): a set of elements from the list of periods.
     A set is used so that there are no duplicates in values.
+
+    Knowledge from Coursera courses:
+    Course 1 Programming for Everybody for declaring a function,
+    using a 'for' loop.
+    Course 2 Python Data Structures for working with a list.
     """
     filters = get_structure(id)
     filters_short = pd.concat(
@@ -698,6 +762,11 @@ def user_interface():
     If the user presses Enter, asks for a new indicator id.
 
     If the user presses Ctrl+C, stops.
+
+    Knowledge from Coursera courses:
+    Course 1 Programming for Everybody for declaring a function,
+    using 'for' loops and conditional 'if' statements.
+    Course 2 Python Data Structures for working with strings.
     """
     print('Press Ctrl+C to exit')
     a = ''
