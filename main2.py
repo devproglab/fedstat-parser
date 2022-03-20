@@ -580,24 +580,99 @@ def get_periods(id):
     return set(periods)
 
 def monetary_value():
-    # 34118 - area intoduced
+    # 34118 - area introduced
     get_data('34118')
     [area, area_col] = load_data('34118')
-    s_mosh = 'Жилые здания многоквартирные'
+    s_mosh = ['Жилые здания многоквартирные',]
+
     # 31452 - average price
     get_data('31452')
     [price, price_col] = load_data('31452')
-    s_vidryn = 'Первичный рынок жилья'
+    s_vidryn = ['Первичный рынок жилья',]
     s_OKATO = ['Центральный федеральный округ', 'Северо-Западный федеральный округ',
                'Южный федеральный округ (с 29.07.2016)', 'Северо-Кавказский федеральный округ',
                'Приволжский федеральный округ', 'Уральский федеральный округ',
                'Сибирский федеральный округ', 'Дальневосточный федеральный округ']
-    S_TIPKVARTIR = 1
+    S_TIPKVARTIR = ['Все типы квартир',]
     PERIOD = ['I квартал', 'II квартал', 'III квартал', 'IV квартал']
     years = [2019, 2020, 2021]
+    # filtering of Prices
+    price = price[price['s_vidryn'].isin(s_vidryn)]
+    price = price[price['TIME'].isin(years)]
+    price = price[price['PERIOD'].isin(PERIOD)]
+    price = price[price['S_TIPKVARTIR'].isin(S_TIPKVARTIR)]
+    price = price[price['s_OKATO'].isin(s_OKATO)]
 
+    # Filtering of Areas
+    area = area.set_index(['s_OKATO', 'TIME', 'PERIOD'])
+    area = area[area['s_mosh'].isin(s_mosh)]
 
+    # Calculate values for the 1st quarter of 2019
+    quarter_index = pd.MultiIndex.from_arrays([s_OKATO + s_OKATO, [2019, 2019, 2019, 2019, 2019, 2019, 2019, 2019,
+                                                                   2020, 2020, 2020, 2020, 2020, 2020, 2020, 2020],
+                                               ['I квартал', 'I квартал', 'I квартал', 'I квартал',
+                                                'I квартал', 'I квартал', 'I квартал', 'I квартал',
+                                                'I квартал', 'I квартал', 'I квартал', 'I квартал',
+                                                'I квартал', 'I квартал', 'I квартал', 'I квартал']])
+    first_quarter = pd.DataFrame(index=quarter_index, columns=['VALUE', ])
+    first_quarter = first_quarter.sort_index()
+    for district in s_OKATO:
+        for year in [2019, 2020]:
+            temp_quarter = area.loc[(district, year, ['январь', 'февраль', 'март']), 'VALUE']
+            first_quarter.loc[(district, year, 'I квартал'), 'VALUE'] = temp_quarter.sum()
 
+    area = pd.concat([area, first_quarter])
+    area = area.loc[(s_OKATO, years, PERIOD)]
+    area = area.reset_index()
+    price_area = price.merge(area, left_on=['s_OKATO', 'TIME', 'PERIOD'], right_on=['s_OKATO', 'TIME', 'PERIOD'])
+
+    # Calculate monetary value
+    monetary = pd.Series([], dtype='float64')
+    for i in range(len(price_area)):
+        monetary[i] = price_area['VALUE_x'][i] * price_area['VALUE_y'][i] / 1000
+    monetary = monetary.round(2)
+    price_area.insert(5, "Monetary Value in millions ₽", monetary)
+
+    # clean up the data
+    price_area = price_area.drop(columns='s_OKATO_id_y')
+    price_area['s_mosh'] = price_area['s_mosh'].fillna(value='Жилые здания многоквартирные')
+    price_area['EI_y'] = price_area['EI_y'].fillna(value='тысяча квадратных метров общей площади')
+
+    # associate technical column names with human-readable column names
+    col_names = ['TIME', 'PERIOD', 's_OKATO', 's_OKATO_id_x', 's_vidryn', 's_mosh', 'EI_x', 'EI_y', 'VALUE_x',
+                 'VALUE_y',
+                 'S_TIPKVARTIR']
+    nice_names = ['Year', 'Period', 'Federal District', 'Federal District (id)', 'Type of Market', 'Type of Building',
+                  'Unit of Price', 'Unit of Area', 'Average Price', 'Area Introduced', 'Type of Flats']
+    name_dict = dict(zip(col_names, nice_names))
+
+    # Replace technical names with human-readable
+    price_area = price_area.rename(columns=name_dict)
+    area = area.rename(columns=name_dict)
+    price = price.rename(columns=name_dict)
+
+    price_area.to_csv('Monetary Value Report.csv')
+
+    # Create pivot-tables
+    price_area = price_area.pivot(index='Federal District', columns=['Year', 'Period'],
+                                  values="Monetary Value in millions ₽")
+    price_pivot = price.pivot(index='Federal District', columns=['Year', 'Period'], values='VALUE')
+    area_pivot = area.pivot(index='Federal District', columns=['Year', 'Period'], values='VALUE')
+
+    inp_d = {'both': [price, area], 'pr': [price, ], 'ar': [area, ], 'no': []}
+    while True:
+        inp = input('Would you like to add separate tables for price and area? pr/ar/both/no ')
+        if inp in inp_d.keys():
+            break
+        else:
+            print('Please enter the correct option')
+    price.name = 'price'
+    area.name = 'area'
+    for i in inp_d[inp]:
+        i.to_csv(i.name + '.csv')
+        print('\n', i.head(), '\n')
+
+    print('\n', price_area, '\n')
 
 
 def user_interface():
@@ -605,10 +680,10 @@ def user_interface():
     a = ''
     while a == '':
         try:
-            # print('''Which report would you like to get? \n 1. Monetary Value of New Flats ''')
-            # rep = input('Enter the number of report: ')
-            # if rep == 1:
-            #     monetary_value()
+            print('''Which report would you like to get? \n 1. Monetary Value of New Flats ''')
+            rep = int(input('Enter the number of report: '))
+            if rep == 1:
+                monetary_value()
 
 
             # if rep == 1:
@@ -617,12 +692,12 @@ def user_interface():
             #     monetary_value(reg)
             # elif rep == 2:
             #     exit()
-            print('Which data do you want to work with?')
-            print('34118 - housing data, \
-            31452 - more housing data')
-            id = str(input())
-            get_data(id)
-            print('Data downloaded into data.sqlite')
+            # print('Which data do you want to work with?')
+            # print('34118 - housing data, \
+            # 31452 - more housing data')
+            # id = str(input())
+            # get_data(id)
+            # print('Data downloaded into data.sqlite')
             print('Press Ctrl+C to exit. Press Enter to load new data')
             a = str(input())
 
@@ -630,4 +705,4 @@ def user_interface():
             exit()
 
 
-# user_interface()
+user_interface()
