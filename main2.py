@@ -694,11 +694,7 @@ def get_data(id, force_upd=False):
             last_upd = eval(item)
         # check which dates are present on server and are not downloaded
         missing = [x for x in upd if x not in last_upd]
-        if len(missing) == 0:
-            print('There are currently no new values to append. \
-            Use load_data() to get data')
-            # return load_data(id)
-        else:
+        if len(missing) != 0:
             # get period ids dictionary to map value to ids
             period_ids = dict(filters.loc[filters["filter_id"] == '33560',
                                                  ["value_id",
