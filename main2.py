@@ -761,7 +761,7 @@ def monetary_value():
     Knowledge from Coursera courses:
     Course 1 Programming for Everybody for declaring a function,
     using a 'for' loop, a 'while' loop and 'if' statements.
-    Course 2 Python Data Structures for working with a dictionary.
+    Course 2 Python Data Structures for working with lists and dictionaries.
     """
     # 34118 - area introduced
     get_data('34118')
@@ -866,6 +866,7 @@ def monthly_introduction():
 
     Knowledge from Coursera courses:
     Course 1 Programming for Everybody for declaring a function.
+    Course 2 Course 2 Python Data Structures for working with lists and dictionaries.
     """
     get_data('34118')
     [area, titles_area] = load_data('34118')
@@ -898,7 +899,7 @@ def quarterly_prices():
 
     Knowledge from Coursera courses:
     Course 1 Programming for Everybody for declaring a function.
-    Course 2 Course 2 Python Data Structures for working with a dictionary.
+    Course 2 Course 2 Python Data Structures for working with lists and dictionaries.
     """
     get_data('31452')
     [prices, titles] = load_data('31452')
@@ -945,8 +946,8 @@ def user_interface():
     a = ''
     while a == '':
         try:
-            print('''Which report would you like to get?  
-            1. Monetary Value of New Flats  
+            print('''Which report would you like to get?
+            1. Monetary Value of New Flats
             2. Monthly Introduction of New Living Space
             3. Average Quarterly Prices of Square Meter''')
             rep = int(input('Enter the number of report: '))
