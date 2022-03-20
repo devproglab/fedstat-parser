@@ -871,22 +871,37 @@ def monthly_introduction():
     area_pivot = area.pivot(index=['Federal District', 'Type of Building'],
                             columns=['Year', 'Period'], values='Area Introduced')
     # Output
-    area_pivot.to_csv('Area Introduced Monthly.csv', encoding='utf-8')
+    area_pivot.to_csv('Monthly Housing Construction.csv', encoding='utf-8')
     print(area_pivot)
 
 
-def monthly_prices():
+def quarterly_prices():
     get_data('31452')
     [prices, titles] = load_data('31452')
-    prices.sort([['s_OKATO', 'TIME', 'PERIOD']])
+    S_TIPKVARTIR = ['Все типы квартир', ]
+
+    # Filter Values
+    prices = prices[prices['S_TIPKVARTIR'].isin(S_TIPKVARTIR)]
+
+    # Sort Values
+    s_vidryn = ['Первичный рынок жилья', 'Вторичный рынок жилья']
+    prices['s_vidryn'] = pd.Categorical(prices['s_vidryn'], categories=s_vidryn, ordered=True)
+    prices.sort_values(['s_OKATO', 'TIME', 'PERIOD', 's_vidryn'])
 
     # associate technical names with human-readable
-    col_names = ['TIME', 'PERIOD', 's_OKATO', 's_OKATO_id', 's_mosh', 'EI', 'VALUE']
-    nice_names = ['Year', 'Period', 'Federal District', 'Federal District (id)', 'Type of Building',
-                  'Unit of Area', 'Area Introduced']
+    col_names = ['TIME', 'PERIOD', 's_OKATO', 's_OKATO_id', 's_vidryn', 'EI', 'VALUE', 'S_TIPKVARTIR']
+    nice_names = ['Year', 'Period', 'Federal District', 'Federal District (id)', 'Type of Market',
+                  'Unit of Price', 'Average Price', 'Type of Flats']
     name_dict = dict(zip(col_names, nice_names))
 
     prices = prices.rename(columns=name_dict)
+    # print(prices.head())
+    prices_pivot = prices.pivot(index=['Federal District', 'Type of Market'],
+                                columns=['Year', 'Period'],
+                                values='Average Price')
+    # Output
+    prices_pivot.to_csv('Quarterly Housing Prices.csv', encoding='utf-8')
+    print(prices_pivot)
 
 
 
@@ -910,14 +925,15 @@ def user_interface():
         try:
             print('''Which report would you like to get?  
             1. Monetary Value of New Flats  
-            2. Monthly Introduction of New Living Space''')
+            2. Monthly Introduction of New Living Space
+            3. Average Quarterly Prices of Square Meter''')
             rep = int(input('Enter the number of report: '))
             if rep == 1:
                 monetary_value()
             elif rep == 2:
                 monthly_introduction()
             elif rep == 3:
-                monthly_prices()
+                quarterly_prices()
             print('Press Ctrl+C to exit. Press Enter to make a new report')
             a = str(input())
         except KeyboardInterrupt:
