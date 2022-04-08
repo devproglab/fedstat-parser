@@ -1,4 +1,11 @@
+"""The program is meant to facilitate the uploading of data from fedstat.ru
+in order to create reports on indicators chosen by the user.
+
+Pylint rated the code 8.08/10
+"""
 from sys import exit
+
+import numpy as np
 
 try:
     import os.path
@@ -18,7 +25,7 @@ try:
     import sqlite3
 except:
     print(
-      'Error: some of the required packages are missing. Please install them.')
+        'Error: some of the required packages are missing. Please install them.')
     exit()
 try:
     conn = sqlite3.connect('data.sqlite')
@@ -30,6 +37,27 @@ except:
 
 
 def get_structure(id, force_upd=False):
+    """Retreives data structure either from an existing structure database
+    or FedStat website.
+
+    Parameters:
+    id (str): id of a FedStat indicator.
+    force_upd (bool): If True, data in the database gets updated.
+
+    Returns:
+    filters (pandas.core.frame.DataFrame): A dataframe with filters
+    used by FedStat for their data.
+
+    Knowledge from Coursera courses:
+    Course 1 Programming for Everybody for declaring a function,
+    using a 'for' loop and conditional 'if' statements.
+    Course 2 Python Data Structures for working with different data structures
+    (strings, lists, and dictionaries).
+    Course 3 Using Python to Access Web Data for retreiving data
+    from FedStat website and using regular expressions.
+    Course 4 Using Databases with Python for
+    creating a database with data structure.
+    """
     cur_str.execute('''CREATE TABLE IF NOT EXISTS Structure
         (id INTEGER PRIMARY KEY, database INTEGER, filter_id INTEGER,
          value_id INTEGER, filter_type INTEGER)''')
@@ -144,7 +172,7 @@ def get_structure(id, force_upd=False):
             filters = pd.merge(filters, layout, how='left')
             # REMOVE LATER: WRITE STRUCTURE TO FILE
             filters['filter_id'] = filters.filter_id.astype(str)
-            for index, row in filters.iterrows():
+            for _, row in filters.iterrows():
                 cur_str.execute('''INSERT OR IGNORE INTO Filters
                 (filter_id, filter_title) VALUES (?, ?)''',
                                 (str(row['filter_id']), row['filter_title']))
@@ -163,20 +191,46 @@ def get_structure(id, force_upd=False):
                 (filter_id, value_id, filter_type, database)
                 VALUES (?, ?, ?, ?)''',
                                 (str(row['filter_id']),
-                                    row['value_id'],
-                                    filter_type,
-                                    id))
+                                 row['value_id'],
+                                 filter_type,
+                                 id))
             conn_str.commit()
             print('Data structure retrieved.')
     return filters
 
 
 def query_size(filterdata):
+    """Counts how many filters' values there are to determine
+    a size of a query needed.
+
+    Parameters:
+    filterdata (pandas.core.frame.DataFrame): A dataframe with FedStat filters.
+
+    Returns:
+    S (int): The query size, the number of filters.
+
+    Knowledge from Coursera courses:
+    Course 1 Programming for Everybody for declaring a function.
+    """
     S = filterdata['filter_id'].value_counts().values.prod()
     return S
 
 
 def make_query(filterdata):
+    """Creates a json-style request that will be used to get data from a server.
+
+    Parameters:
+    filterdata (pandas.core.frame.DataFrame): A dataframe with FedStat filters.
+
+    Returns:
+    query_json (dict): A query in a form of a json-style request.
+
+    Knowledge from Coursera courses:
+    Course 1 Programming for Everybody for declaring a function
+    and using 'for' loops.
+    Course 2 Python Data Structures for working with different data structures
+    (strings, lists, and dictionaries).
+    """
     # concatenate filter ids and filter value ids for the query
     p = [str(m) + "_" + str(n) for m, n in zip([val[0] for val in filterdata[["filter_id"]].values.tolist()],
                                                [val[0] for val in filterdata[["value_id"]].values.tolist()])]
@@ -185,7 +239,7 @@ def make_query(filterdata):
     meta = filterdata.loc[filterdata["filter_id"] == '0'].values[0]
     query = [('id', meta[2]),
              ('title', meta[3])] + filterdata.drop_duplicates(
-        subset=["filter_id"]).loc[:, ['filter_type', 'filter_id']].to_records(index=None).tolist() \
+                 subset=["filter_id"]).loc[:, ['filter_type', 'filter_id']].to_records(index=None).tolist() \
         + list(zip([['selectedFilterIds'] * len(p)][0], p))
     # format query to json-styled request accepted by the server
     query_json = {}
@@ -194,7 +248,32 @@ def make_query(filterdata):
     return query_json
 
 
-def parse_sdmx(response, id, force_upd=False, nowrite=False):
+def parse_sdmx(response, id, nowrite=False):
+    """Goes through a datafile received from FedStat and arranges the data
+    in an appropriate manner to be written into the database.
+    If nowrite=False the data is written into the database,
+    if nowrite=True the data is returned in a dataframe.
+
+    Parameters:
+    response (urlib.response): An object with data uploaded
+    from FedStat website by sending a request to the server.
+    id (str): id of a FedStat indicator.
+    nowrite (bool): If False, the parsed data is written into the database.
+
+    Returns:
+    parsed (pandas.core.frame.DataFrame): A dataframe with parsed data
+    from FedStat.
+
+    Knowledge from Coursera courses:
+    Course 1 Programming for Everybody for declaring a function,
+    using 'for' loops and conditional 'if' statements.
+    Course 2 Python Data Structures for working with different data structures
+    (strings, lists, and dictionaries).
+    Course 3 Using Python to Access Web Data to parse the data retreived
+    from FedStat website.
+    Course 4 Using Databases with Python for declaring the function
+    (week 1 material about OOP).
+    """
     # decode .sdmx data parse document tree
     print('Reading data...')
     data = response.read().decode("utf-8")
@@ -226,18 +305,18 @@ def parse_sdmx(response, id, force_upd=False, nowrite=False):
         fields_title.append(node.text)
     # get internal filter value ids
     fields_codes = list()
-    for i in range(0, len(fields_id)):
+    for _, fields_id_item in enumerate(fields_id):
         loc = 'CodeLists/structure:CodeList/[@id="' \
-            + fields_id[i] + '"]/structure:Code'
+            + fields_id_item + '"]/structure:Code'
         temp = list()
         for node in tree.findall(loc, ns):
             temp.append(node.attrib["value"])
         fields_codes.append(temp)
     # get filter value names
     fields_values = list()
-    for i in range(0, len(fields_id)):
+    for _, fields_id_item in enumerate(fields_id):
         loc = 'CodeLists/structure:CodeList/[@id="' \
-            + fields_id[i] + '"]/structure:Code/structure:Description'
+            + fields_id_item + '"]/structure:Code/structure:Description'
         temp = list()
         for node in tree.findall(loc, ns):
             temp.append(node.text)
@@ -304,6 +383,31 @@ def parse_sdmx(response, id, force_upd=False, nowrite=False):
 
 def write_db(id, order, colnames, fields_id, fields_title, fields_values,
              fields_codes, df):
+    """Writes parsed data into the database. Each FedStat indicator has
+    its own table Data + indicator id. Names of filters are written into
+    their own table.
+
+    Parameters:
+    id (str): id of a FedStat indicator.
+    order (list): A list of column names in proper order.
+    colnames (list): A list with future column names.
+    order columns plus time and value columns
+    fields_id (list): A list with filter ids.
+    fields_title (list): A list with filter titles.
+    fields_values (list): A list with filter value names.
+    fields_codes (list): A list with filter value ids.
+    df (list): A list whose elements are also lists.
+    Stores data that will be written into the database
+
+    Results in data being written into the database.
+
+    Knowledge from Coursera courses:
+    Course 1 Programming for Everybody for declaring a function,
+    using 'for' loops and conditional 'if' statements.
+    Course 2 Python Data Structures for working with different data structures
+    (strings, lists, and tuples).
+    Course 4 Using Databases with Python for creating and working with database tables.
+    """
     # begin with table creation
     script = 'CREATE TABLE IF NOT EXISTS Data' + str(id) \
         + ' (id INTEGER PRIMARY KEY AUTOINCREMENT UNIQUE, Time INTEGER, \
@@ -320,11 +424,27 @@ def write_db(id, order, colnames, fields_id, fields_title, fields_values,
                  fed_id TEXT UNIQUE, fed_title TEXT UNIQUE)'
         cur.executescript(script)
         if r is None:
-            script = 'ALTER TABLE Data' + str(id) + 'ADD' + str(i) + 'INTEGER'
+            script = 'ALTER TABLE Data' + str(id) + ' ADD ' + str(i) + ' INTEGER'
             cur.execute(script)
     for i in range(0, len(fields_id)):
         # save filtername we are working with
         c = fields_id[i]
+        # map filter ids to human-readable titles
+        script = 'CREATE TABLE IF NOT EXISTS Filternames \
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT UNIQUE, \
+                 field_id TEXT UNIQUE, field_title TEXT)'
+        cur.executescript(script)
+        script = 'INSERT OR IGNORE INTO Filternames (field_id, field_title) ' \
+                 'VALUES ( ?, ? )'
+        cur.execute(script, (fields_id[i], fields_title[i]))
+        # add some predetermined names as well
+        script = 'INSERT OR IGNORE INTO Filternames (field_id, field_title) ' \
+                 'VALUES ("TIME", "Год")'
+        cur.execute(script)
+        script = 'INSERT OR IGNORE INTO Filternames (field_id, field_title) ' \
+                 'VALUES ("VALUE", "Значение")'
+        cur.execute(script)
+
         # iterate trough all values for each filter
         for j in range(0, len(fields_values[i])):
             # add filter decoders into DB
@@ -361,8 +481,8 @@ def write_db(id, order, colnames, fields_id, fields_title, fields_values,
         script = script.rstrip(' , ')
         left = left.rstrip(',') + ')'
         script = script + left
-        RowToUpload = tuple(temp_ds)
-        cur.execute(script, RowToUpload)
+        row_to_upload = tuple(temp_ds)
+        cur.execute(script, row_to_upload)
     conn.commit()
     cols = ''
     for item in colnames:
@@ -375,7 +495,7 @@ def write_db(id, order, colnames, fields_id, fields_title, fields_values,
     cur.execute('INSERT OR IGNORE INTO Metadata \
     (dataset, columns) VALUES (?, ?)', (id, cols))
     conn.commit()
-    parsed = load_data(id)
+    parsed = load_data(id)[0]
     last_upd = set(list(tuple(x) for x in parsed.loc[:, ["TIME", "PERIOD"]].values))
     cur.execute('SELECT id FROM Metadata WHERE dataset = ?', (str(id),))
     row = cur.fetchone()
@@ -387,6 +507,25 @@ def write_db(id, order, colnames, fields_id, fields_title, fields_values,
 
 
 def query_splitter(filters, id, nowrite=False):
+    """Splits a query into multiple queries if the original one is too big.
+
+    Parameters:
+    filters (pandas.core.frame.DataFrame): A dataframe with FedStat filters.
+    id (str): id of a FedStat indicator.
+    nowrite (bool): If False, the data is written into the database.
+
+    Returns:
+    parsed (pandas.core.frame.DataFrame): A dataframe with parsed data from FedStat.
+    Directly returns this dataframe when nowrite=True.
+
+    Knowledge from Coursera courses:
+    Course 1 Programming for Everybody for declaring a function,
+    using 'for' loops and conditional 'if' statements.
+    Course 2 Python Data Structures for working with different data structures
+    (strings and lists).
+    Course 3 Using Python to Access Web Data for parts where data gets retreived
+    from FedStat website.
+    """
     chunk_size = 1000000
     overall_df = pd.DataFrame()
     if query_size(filters) > chunk_size:
@@ -437,9 +576,6 @@ def query_splitter(filters, id, nowrite=False):
         try:
             response = urlopen(request, timeout=300)
             print('Data retrieved.')
-            parse_sdmx(response, id, nowrite=nowrite)
-            time.sleep(1)
-            print('Data retrieved.')
         except:
             print('Failed to retrieve data from FedStat. Please try later')
             exit()
@@ -451,6 +587,24 @@ def query_splitter(filters, id, nowrite=False):
 
 
 def load_data(id):
+    """Loads data from the database. This function is called when there is
+    no new data on FedStat server for that indicator that is not already in
+    the database.
+
+    Parameters:
+    id (str): id of a FedStat indicator.
+
+    Returns:
+    [result, titles] (list): A list whose elements are a dataframe result
+    containing data for that indicator and a list of filters' titles.
+
+    Knowledge from Coursera courses:
+    Course 1 Programming for Everybody for declaring a function,
+    using 'for' loops and conditional 'if' statements.
+    Course 2 Python Data Structures for working with different data structures
+    (strings and lists).
+    Course 4 Using Databases with Python for retreiving data from the database.
+    """
     cur.execute('SELECT columns FROM Metadata WHERE dataset=?', (id, ))
     item = cur.fetchone()
     for row in item:
@@ -459,6 +613,9 @@ def load_data(id):
     beg = 'SELECT '
     mid = 'FROM Data' + str(id)
     end = ' ON '
+    # for some filter fields it can be more convenient for the user
+    # to have codes instead of text values
+    # so we add these fields to the output
     add = ['s_OKPD2', 's_OKPD', 's_OKATO']
     for col in colnames:
         try:
@@ -477,14 +634,47 @@ def load_data(id):
 
     script = beg.rstrip(', ') + ' ' + mid + end[:-4] + ' ORDER BY Data' + str(id) + '.TIME'
     cur.execute(script)
+    # rename fields with codes so that there are no duplicates
     for i in add:
         if i in colnames:
             colnames.insert(colnames.index(i)+1, i+'_id')
+    # load data into dataframe
     result = pd.DataFrame(cur, columns=colnames)
-    return result
+    # now we select human-readable titles for filter values
+    titles = list()
+    for i in colnames:
+        script = 'SELECT field_title FROM Filternames WHERE field_id = ?'
+        cur.execute(script, (i, ))
+        try:
+            row = cur.fetchone()[0]
+        except:
+            row = None
+        if row is None:
+            titles.append(i)
+        else:
+            titles.append(row)
+    return [result, titles]
 
 
 def get_data(id, force_upd=False):
+    """Loads data needed to make reports.
+
+    Parameters:
+    id (str): id of a FedStat indicator.
+    force_upd (bool): If True, data in the database gets updated.
+
+    Results in either the data being written into the database by calling
+    query_splitter() that in turn calls parse_sdmx() that calls write_db(),
+    when there is no data on the selected indicator in the database,
+    or the data being uploaded from the database.
+
+    Knowledge from Coursera courses:
+    Course 1 Programming for Everybody for declaring a function,
+    using 'for' loops and conditional 'if' statements.
+    Course 2 Python Data Structures for working with different data structures
+    (strings, lists and dictionaries).
+    Course 4 Using Databases with Python for retreiving data from the database.
+    """
     filters = get_structure(id, force_upd=force_upd)
     if filters.empty:
         print('Error in getting the internal Fedstat filter structure. \
@@ -506,28 +696,24 @@ def get_data(id, force_upd=False):
             last_upd = eval(item)
         # check which dates are present on server and are not downloaded
         missing = [x for x in upd if x not in last_upd]
-        if len(missing) == 0:
-            print('There are currently no new values to append. \
-            Use load_data() to get data')
-            # return load_data(id)
-        else:
+        if len(missing) != 0:
             # get period ids dictionary to map value to ids
             period_ids = dict(filters.loc[filters["filter_id"] == '33560',
-                                                 ["value_id",
-                                                  "value_title"]].values.tolist())
+                                          ["value_id",
+                                           "value_title"]].values.tolist())
             period_ids = dict((v, k) for k, v in period_ids.items())
             # get unique missing filter values
             missing = list(missing)
-            missing_years = list(set([i[0] for i in missing]))
-            missing_periods = list(set([i[1] for i in missing]))
+            missing_years = list({[i[0] for i in missing]})
+            missing_periods = list({[i[1] for i in missing]})
             templist = list()
-            for i in range(0, len(missing_years)):
-                templist.append(['3', 'Год', str(missing_years[i]),
-                                 str(missing_years[i]), 'columnObjectIds'])
-            for i in range(0, len(missing_periods)):
+            for _, missing_year in enumerate(missing_years):
+                templist.append(['3', 'Год', str(missing_year),
+                                 str(missing_year), 'columnObjectIds'])
+            for _, missing_period in enumerate(missing_periods):
                 templist.append(['33560', 'Период',
-                                 period_ids[missing_periods[i]],
-                                 missing_periods[i], 'columnObjectIds'])
+                                 period_ids[missing_period],
+                                 missing_period, 'columnObjectIds'])
             temp = pd.DataFrame(templist, columns=filters.columns)
             # change the filters to load missing dates
             filters_augm = pd.concat([filters.loc[(filters["filter_id"] != "3") & (filters["filter_id"] != "33560")], temp])
@@ -542,6 +728,22 @@ def get_data(id, force_upd=False):
 
 
 def get_periods(id):
+    """Fetches from FedStat server what periods are available for an indicator.
+    The function is needed to compare dates that are on the server
+    and those that are already in the database.
+
+    Parameters:
+    id (str): id of a FedStat indicator.
+
+    Returns:
+    set(periods): a set of elements from the list of periods.
+    A set is used so that there are no duplicates in values.
+
+    Knowledge from Coursera courses:
+    Course 1 Programming for Everybody for declaring a function,
+    using a 'for' loop.
+    Course 2 Python Data Structures for working with a list.
+    """
     filters = get_structure(id)
     filters_short = pd.concat(
         [filters.loc[(filters["filter_id"] != "3") & (filters["filter_id"] != "33560") & (filters["filter_id"] != "57956")].groupby('filter_id').first().reset_index(),
@@ -554,18 +756,206 @@ def get_periods(id):
     return set(periods)
 
 
+def monetary_value():
+    """Creates a report on monetary value of new flats in different discticts
+    and different time periods and writes it into a .csv file.
+
+    Knowledge from Coursera courses:
+    Course 1 Programming for Everybody for declaring a function,
+    using a 'for' loop, a 'while' loop and 'if' statements.
+    Course 2 Python Data Structures for working with lists and dictionaries.
+    """
+    # 34118 - area introduced
+    get_data('34118')
+    [area, area_col] = load_data('34118')
+    s_mosh = ['Жилые здания многоквартирные',]
+
+    # 31452 - average price
+    get_data('31452')
+    [price, price_col] = load_data('31452')
+    s_vidryn = ['Первичный рынок жилья',]
+    s_OKATO = ['Центральный федеральный округ', 'Северо-Западный федеральный округ',
+               'Южный федеральный округ (с 29.07.2016)', 'Северо-Кавказский федеральный округ',
+               'Приволжский федеральный округ', 'Уральский федеральный округ',
+               'Сибирский федеральный округ', 'Дальневосточный федеральный округ']
+    S_TIPKVARTIR = ['Все типы квартир',]
+    PERIOD = ['I квартал', 'II квартал', 'III квартал', 'IV квартал']
+    years = [2019, 2020, 2021]
+    # filtering of Prices
+    price = price[price['s_vidryn'].isin(s_vidryn)]
+    price = price[price['TIME'].isin(years)]
+    price = price[price['PERIOD'].isin(PERIOD)]
+    price = price[price['S_TIPKVARTIR'].isin(S_TIPKVARTIR)]
+    price = price[price['s_OKATO'].isin(s_OKATO)]
+
+    # Filtering of Areas
+    area = area.set_index(['s_OKATO', 'TIME', 'PERIOD'])
+    area = area[area['s_mosh'].isin(s_mosh)]
+
+    # Calculate values for the 1st quarter of 2019
+    quarter_index = pd.MultiIndex.from_arrays([s_OKATO + s_OKATO,
+                                               [2019, 2019, 2019, 2019, 2019, 2019, 2019, 2019,
+                                                2020, 2020, 2020, 2020, 2020, 2020, 2020, 2020],
+                                               ['I квартал', 'I квартал', 'I квартал', 'I квартал',
+                                                'I квартал', 'I квартал', 'I квартал', 'I квартал',
+                                                'I квартал', 'I квартал', 'I квартал', 'I квартал',
+                                                'I квартал', 'I квартал', 'I квартал', 'I квартал']])
+    first_quarter = pd.DataFrame(index=quarter_index, columns=['VALUE', ])
+    first_quarter = first_quarter.sort_index()
+    for district in s_OKATO:
+        for year in [2019, 2020]:
+            temp_quarter = area.loc[(district, year, ['январь', 'февраль', 'март']), 'VALUE']
+            first_quarter.loc[(district, year, 'I квартал'), 'VALUE'] = temp_quarter.sum()
+
+    area = pd.concat([area, first_quarter])
+    area = area.loc[(s_OKATO, years, PERIOD)]
+    area = area.reset_index()
+    price_area = price.merge(area, left_on=['s_OKATO', 'TIME', 'PERIOD'],
+                             right_on=['s_OKATO', 'TIME', 'PERIOD'])
+
+    # Calculate monetary value
+    price_area.insert(5, "Monetary Value in RUB, millions",
+                      price_area['VALUE_x'].multiply(price_area['VALUE_y']) / 1000)
+
+    # clean up the data
+    price_area = price_area.drop(columns='s_OKATO_id_y')
+    price_area['s_mosh'] = price_area['s_mosh'].fillna(value='Жилые здания многоквартирные')
+    price_area['EI_y'] = price_area['EI_y'].fillna(value='тысяча квадратных метров общей площади')
+
+    # associate technical column names with human-readable column names
+    col_names = ['TIME', 'PERIOD', 's_OKATO', 's_OKATO_id_x', 's_vidryn',
+                 's_mosh', 'EI_x', 'EI_y', 'VALUE_x', 'VALUE_y', 'S_TIPKVARTIR']
+    nice_names = ['Year', 'Period', 'Federal District', 'Federal District (id)',
+                  'Type of Market', 'Type of Building', 'Unit of Price',
+                  'Unit of Area', 'Average Price', 'Area Introduced',
+                  'Type of Flats']
+    name_dict = dict(zip(col_names, nice_names))
+
+    # Replace technical names with human-readable
+    price_area = price_area.rename(columns=name_dict)
+    area = area.rename(columns=name_dict)
+    price = price.rename(columns=name_dict)
+
+    # Create pivot-tables
+    price_area_pivot = price_area.pivot(index='Federal District', columns=['Year', 'Period'],
+                                        values="Monetary Value in RUB, millions")
+    price_pivot = price.pivot(index='Federal District', columns=['Year', 'Period'], values='VALUE')
+    area_pivot = area.pivot(index='Federal District', columns=['Year', 'Period'], values='VALUE')
+
+    price_area_pivot.to_csv('Monetary Value Report.csv', encoding='utf-8')
+    print('\n', price_area_pivot, '\n')
+
+    inp_d = {'both': [price_pivot, area_pivot], 'pr': [price_pivot, ],
+             'ar': [area_pivot, ], 'no': []}
+    while True:
+        inp = input('Would you like to add separate tables for price and area? pr/ar/both/no ')
+        if inp in inp_d.keys():
+            break
+        else:
+            print('Please enter the correct option')
+    price_pivot.name = 'price'
+    area_pivot.name = 'area'
+    for i in inp_d[inp]:
+        i.to_csv(i.name + '.csv', encoding='utf-8')
+        print('\n', i, '\n')
+
+
+def monthly_introduction():
+    """Creates a report on monthly housing construction and writes it into a .csv file.
+
+    Knowledge from Coursera courses:
+    Course 1 Programming for Everybody for declaring a function.
+    Course 2 Course 2 Python Data Structures for working with lists and dictionaries.
+    """
+    get_data('34118')
+    [area, titles_area] = load_data('34118')
+    PERIOD = ['январь', 'февраль', 'март', 'апрель', 'май', 'июнь',
+              'июль', 'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь']
+    area = area[area['PERIOD'].isin(PERIOD)]
+
+    # categorize months for the sort
+    area['PERIOD'] = pd.Categorical(area['PERIOD'], categories=PERIOD, ordered=True)
+    area.sort_values(['s_OKATO', 'TIME', 'PERIOD'])
+
+    # associate technical names with human-readable
+    col_names = ['TIME', 'PERIOD', 's_OKATO', 's_OKATO_id', 's_mosh', 'EI', 'VALUE']
+    nice_names = ['Year', 'Period', 'Region', 'Federal District (id)',
+                  'Type of Building', 'Unit of Area', 'Area Introduced']
+    name_dict = dict(zip(col_names, nice_names))
+
+    # Replace technical names with human-readable
+    area = area.rename(columns=name_dict)
+
+    area_pivot = area.pivot(index=['Region', 'Type of Building'],
+                            columns=['Year', 'Period'], values='Area Introduced')
+    # Output
+    area_pivot.to_csv('Monthly Housing Construction.csv', encoding='utf-8')
+    print(area_pivot)
+
+
+def quarterly_prices():
+    """Creates a report on average monthly prices of flats in different regions.
+
+    Knowledge from Coursera courses:
+    Course 1 Programming for Everybody for declaring a function.
+    Course 2 Course 2 Python Data Structures for working with lists and dictionaries.
+    """
+    get_data('31452')
+    [prices, titles] = load_data('31452')
+    S_TIPKVARTIR = ['Все типы квартир', ]
+
+    # Filter Values
+    prices = prices[prices['S_TIPKVARTIR'].isin(S_TIPKVARTIR)]
+
+    # Sort Values
+    s_vidryn = ['Первичный рынок жилья', 'Вторичный рынок жилья']
+    prices['s_vidryn'] = pd.Categorical(prices['s_vidryn'], categories=s_vidryn, ordered=True)
+    prices.sort_values(['s_OKATO', 'TIME', 'PERIOD', 's_vidryn'])
+
+    # associate technical names with human-readable
+    col_names = ['TIME', 'PERIOD', 's_OKATO', 's_OKATO_id', 's_vidryn', 'EI', 'VALUE', 'S_TIPKVARTIR']
+    nice_names = ['Year', 'Period', 'Region', 'Federal District (id)', 'Type of Market',
+                  'Unit of Price', 'Average Price', 'Type of Flats']
+    name_dict = dict(zip(col_names, nice_names))
+
+    prices = prices.rename(columns=name_dict)
+    # print(prices.head())
+    prices_pivot = prices.pivot(index=['Region', 'Type of Market'],
+                                columns=['Year', 'Period'],
+                                values='Average Price')
+    # Output
+    prices_pivot.to_csv('Quarterly Housing Prices.csv', encoding='utf-8')
+    print(prices_pivot)
+
+
 def user_interface():
-    print('Press Ctrl+C to exit')
+    """Asks the user what kind of report he wants to get.
+    Depending on a number entered by the user calls a corresponding function.
+    After the report is made, if the user presses Enter, asks to enter a number
+    corresponding to another report.
+    If the user writes any other character, it stops.
+
+    Knowledge from Coursera courses:
+    Course 1 Programming for Everybody for declaring a function and
+    using 'conditional 'if' statements.
+    Course 2 Python Data Structures for working with strings.
+    """
+    print('Write anything and hit enter (or press Ctrl + C) to exit')
     a = ''
     while a == '':
         try:
-            print('Which data do you want to work with?')
-            print('34118 - housing data, 58971 - food, \
-            31452 - more housing data')
-            id = str(input())
-            parsed = get_data(id)
-            print('Data downloaded into data.sqlite')
-            print('Press Ctrl+C to exit. Press Enter to load new data')
+            print('''Which report would you like to get?  
+            1. Monetary Value of New Flats  (by Quarter & Federal district)
+            2. Monthly housing construction (by Region, Housing Type and Month) 
+            3. Average Quarterly Prices of Square Meter (by Quarter and Region)''')
+            rep = int(input('Enter the number of report: '))
+            if rep == 1:
+                monetary_value()
+            elif rep == 2:
+                monthly_introduction()
+            elif rep == 3:
+                quarterly_prices()
+            print('Write anything and hit enter (or press Ctrl + C) to exit. Press Enter to make a new report')
             a = str(input())
         except KeyboardInterrupt:
             exit()
