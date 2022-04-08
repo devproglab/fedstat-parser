@@ -421,7 +421,7 @@ def write_db(id, order, colnames, fields_id, fields_title, fields_values,
     for i in order:
         script = 'CREATE TABLE IF NOT EXISTS ' + str(i) + \
                  ' (id INTEGER PRIMARY KEY AUTOINCREMENT UNIQUE, \
-                 fed_id TEXT UNIQUE, fed_title TEXT UNIQUE)'
+                 fed_id TEXT UNIQUE, fed_title TEXT)'
         cur.executescript(script)
         if r is None:
             script = 'ALTER TABLE Data' + str(id) + ' ADD ' + str(i) + ' INTEGER'
@@ -928,36 +928,38 @@ def quarterly_prices():
     print(prices_pivot)
 
 
-def user_interface():
-    """Asks the user what kind of report he wants to get.
-    Depending on a number entered by the user calls a corresponding function.
-    After the report is made, if the user presses Enter, asks to enter a number
-    corresponding to another report.
-    If the user writes any other character, it stops.
-
-    Knowledge from Coursera courses:
-    Course 1 Programming for Everybody for declaring a function and
-    using 'conditional 'if' statements.
-    Course 2 Python Data Structures for working with strings.
-    """
-    print('Write anything and hit enter (or press Ctrl + C) to exit')
-    a = ''
-    while a == '':
-        try:
-            print('''Which report would you like to get?  
-            1. Monetary Value of New Flats  (by Quarter & Federal district)
-            2. Monthly housing construction (by Region, Housing Type and Month) 
-            3. Average Quarterly Prices of Square Meter (by Quarter and Region)''')
-            rep = int(input('Enter the number of report: '))
-            if rep == 1:
-                monetary_value()
-            elif rep == 2:
-                monthly_introduction()
-            elif rep == 3:
-                quarterly_prices()
-            print('Write anything and hit enter (or press Ctrl + C) to exit. Press Enter to make a new report')
-            a = str(input())
-        except KeyboardInterrupt:
-            exit()
-
-user_interface()
+# def user_interface():
+#     """Asks the user what kind of report he wants to get.
+#     Depending on a number entered by the user calls a corresponding function.
+#     After the report is made, if the user presses Enter, asks to enter a number
+#     corresponding to another report.
+#     If the user writes any other character, it stops.
+#
+#     Knowledge from Coursera courses:
+#     Course 1 Programming for Everybody for declaring a function and
+#     using 'conditional 'if' statements.
+#     Course 2 Python Data Structures for working with strings.
+#     """
+#     print('Write anything and hit enter (or press Ctrl + C) to exit')
+#     a = ''
+#     while a == '':
+#         try:
+#             print('''Which report would you like to get?
+#             1. Monetary Value of New Flats  (by Quarter & Federal district)
+#             2. Monthly housing construction (by Region, Housing Type and Month)
+#             3. Average Quarterly Prices of Square Meter (by Quarter and Region)''')
+#             rep = int(input('Enter the number of report: '))
+#             if rep == 1:
+#                 monetary_value()
+#             elif rep == 2:
+#                 monthly_introduction()
+#             elif rep == 3:
+#                 quarterly_prices()
+#             print('Write anything and hit enter (or press Ctrl + C) to exit. Press Enter to make a new report')
+#             a = str(input())
+#         except KeyboardInterrupt:
+#             exit()
+#
+# user_interface()
+a = int(input())
+get_data(a)
